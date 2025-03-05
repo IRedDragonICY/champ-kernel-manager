@@ -3,8 +3,6 @@ name: Generated APK AAB (Upload - Create Artifact To Github Action)
 env:
   # The name of the main module repository
   main_project_module: app
-
-  # The name of the Play Store
   playstore_name: Champ Kernel Manager
 
 on:
@@ -35,52 +33,43 @@ jobs:
           java-version: '17'
           cache: 'gradle'
 
+      # Ubah izin eksekusi Gradle Wrapper (karena ada di root project, bukan di app/)
       - name: Change wrapper permissions
-        working-directory: ${{ env.main_project_module }}
         run: chmod +x gradlew
 
-      # Run Tests Build
+      # Jalankan build dan perintah lainnya dari root project
       - name: Run gradle tests
-        working-directory: ${{ env.main_project_module }}
         run: ./gradlew test
 
-      # Run Build Project
       - name: Build gradle project
-        working-directory: ${{ env.main_project_module }}
         run: ./gradlew build
 
-      # Create APK Debug
       - name: Build apk debug project (APK) - ${{ env.main_project_module }} module
-        working-directory: ${{ env.main_project_module }}
         run: ./gradlew assembleDebug
 
-      # Create APK Release
       - name: Build apk release project (APK) - ${{ env.main_project_module }} module
-        working-directory: ${{ env.main_project_module }}
         run: ./gradlew assemble
 
-      # Create Bundle AAB Release (main module build: bundleRelease)
       - name: Build app bundle release (AAB) - ${{ env.main_project_module }} module
-        working-directory: ${{ env.main_project_module }}
-        run: ./gradlew bundleRelease
+        run: ./gradlew ${{ env.main_project_module }}:bundleRelease
 
-      # Upload Artifact Build (APK Debug)
+      # Upload APK Debug
       - name: Upload APK Debug - ${{ env.repository_name }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.date_today }} - ${{ env.playstore_name }} - ${{ env.repository_name }} - APK(s) debug generated
-          path: ${{ env.main_project_module }}/build/outputs/apk/debug/
+          path: app/build/outputs/apk/debug/
 
-      # Upload Artifact Build (APK Release)
+      # Upload APK Release
       - name: Upload APK Release - ${{ env.repository_name }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.date_today }} - ${{ env.playstore_name }} - ${{ env.repository_name }} - APK(s) release generated
-          path: ${{ env.main_project_module }}/build/outputs/apk/release/
+          path: app/build/outputs/apk/release/
 
-      # Upload Artifact Build (AAB Release)
+      # Upload AAB Release
       - name: Upload AAB (App Bundle) Release - ${{ env.repository_name }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.date_today }} - ${{ env.playstore_name }} - ${{ env.repository_name }} - App bundle(s) AAB release generated
-          path: ${{ env.main_project_module }}/build/outputs/bundle/release/
+          path: app/build/outputs/bundle/release/
