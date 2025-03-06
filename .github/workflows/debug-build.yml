@@ -37,28 +37,41 @@ jobs:
       - name: Build gradle project
         run: ./gradlew build
 
-      - name: Build apk debug project (APK) - ${{ env.main_project_module }} module
+      - name: Build apk debug project (APK)
         run: ./gradlew assembleDebug
 
-      - name: Build apk release project (APK) - ${{ env.main_project_module }} module
+      - name: Build apk release project (APK)
         run: ./gradlew assemble
 
-      - name: Build app bundle release (AAB) - ${{ env.main_project_module }} module
+      - name: Build app bundle release (AAB)
         run: ./gradlew ${{ env.main_project_module }}:bundleRelease
 
-      - name: Upload APK Debug - ${{ env.repository_name }}
+      - name: Create Pre-release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ${{ env.date_today }} - ${{ env.playstore_name }}
+          tag_name: v${{ env.date_today }}
+          prerelease: true
+          files: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/bundle/release/*.aab
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload APK Debug - Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.date_today }} - ${{ env.playstore_name }} - ${{ env.repository_name }} - APK(s) debug generated
           path: app/build/outputs/apk/debug/
 
-      - name: Upload APK Release - ${{ env.repository_name }}
+      - name: Upload APK Release - Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.date_today }} - ${{ env.playstore_name }} - ${{ env.repository_name }} - APK(s) release generated
           path: app/build/outputs/apk/release/
 
-      - name: Upload AAB (App Bundle) Release - ${{ env.repository_name }}
+      - name: Upload AAB (App Bundle) Release - Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.date_today }} - ${{ env.playstore_name }} - ${{ env.repository_name }} - App bundle(s) AAB release generated
