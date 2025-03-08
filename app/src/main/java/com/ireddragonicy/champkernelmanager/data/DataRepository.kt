@@ -53,16 +53,26 @@ class DataRepository private constructor() {
             }
 
             val curFreq = getFreqMHz(basePath + "scaling_cur_freq")
-            val maxFreq = getFreqMHz(basePath + "cpuinfo_max_freq")
+            val hwMaxFreq = getFreqMHz(basePath + "cpuinfo_max_freq")
+            val scalingMaxFreq = getFreqMHz(basePath + "scaling_max_freq")
             val minFreq = getFreqMHz(basePath + "scaling_min_freq")
             val governor = FileUtils.readFileAsRoot(basePath + "scaling_governor") ?: "N/A"
             val online = FileUtils.readFileAsRoot(onlinePath) == "1" || core == 0
 
-            CpuCoreInfo(core, curFreq, maxFreq, minFreq, governor, online)
+            CpuCoreInfo(
+                core = core,
+                curFreqMHz = curFreq,
+                hwMaxFreqMHz = hwMaxFreq,
+                scalingMaxFreqMHz = scalingMaxFreq,
+                minFreqMHz = minFreq,
+                governor = governor,
+                online = online
+            )
         }
 
+        // Group by hardware maximum frequency to identify clusters
         val groups = cpuCoreInfos.groupBy {
-            it.maxFreqMHz.split(" ").firstOrNull()?.toLongOrNull() ?: 0L
+            it.hwMaxFreqMHz.split(" ").firstOrNull()?.toLongOrNull() ?: 0L
         }
 
         val sortedGroups = groups.toList().sortedBy { it.first }
@@ -79,7 +89,7 @@ class DataRepository private constructor() {
     }
 
     suspend fun getAvailableGovernors(): List<String> = withContext(Dispatchers.IO) {
-        FileUtils.readFileAsRoot("${CPU_PATH}cpu0${CPU_FREQ_PATH}scaling_available_governors")
+        FileUtils.readFileAsRoot("${CPU_PATH}0${CPU_FREQ_PATH}scaling_available_governors")
             ?.split(" ")
             ?.filter { it.isNotBlank() }
             ?: emptyList()
@@ -88,8 +98,18 @@ class DataRepository private constructor() {
     suspend fun setAllCoresGovernor(governor: String) = withContext(Dispatchers.IO) {
         val coreCount = Runtime.getRuntime().availableProcessors()
         (0 until coreCount).all { core ->
-            FileUtils.writeFileAsRoot("${CPU_PATH}cpu$core${CPU_FREQ_PATH}scaling_governor", governor)
+            FileUtils.writeFileAsRoot("${CPU_PATH}$core${CPU_FREQ_PATH}scaling_governor", governor)
         }
+    }
+
+    suspend fun setScalingMaxFreq(core: Int, freq: String): Boolean = withContext(Dispatchers.IO) {
+        val freqKHz = freq.replace(" MHz", "").toLong() * 1000
+        FileUtils.writeFileAsRoot("${CPU_PATH}$core${CPU_FREQ_PATH}scaling_max_freq", freqKHz.toString())
+    }
+
+    suspend fun setScalingMinFreq(core: Int, freq: String): Boolean = withContext(Dispatchers.IO) {
+        val freqKHz = freq.replace(" MHz", "").toLong() * 1000
+        FileUtils.writeFileAsRoot("${CPU_PATH}$core${CPU_FREQ_PATH}scaling_min_freq", freqKHz.toString())
     }
 
     suspend fun getCoreControlInfo(): CoreControlInfo = withContext(Dispatchers.IO) {
@@ -111,51 +131,51 @@ class DataRepository private constructor() {
         FileUtils.writeFileAsRoot("$CPU_PATH$core$CPU_ONLINE_PATH", if (enabled) "1" else "0")
     }
 
-suspend fun getGpuInfo(): DevfreqInfo = withContext(Dispatchers.IO) {
-    fun getFreqMHz(freqPath: String): String {
-        val freqHz = FileUtils.readFileAsRoot(freqPath)?.toLongOrNull() ?: 0
-        return "${freqHz / 1000000} MHz"
+    suspend fun getGpuInfo(): DevfreqInfo = withContext(Dispatchers.IO) {
+        fun getFreqMHz(freqPath: String): String {
+            val freqHz = FileUtils.readFileAsRoot(freqPath)?.toLongOrNull() ?: 0
+            return "${freqHz / 1000000} MHz"
+        }
+
+        val maxFreq = getFreqMHz("${GPU_PATH}max_freq")
+        val minFreq = getFreqMHz("${GPU_PATH}min_freq")
+        val curFreq = getFreqMHz("${GPU_PATH}cur_freq")
+        val targetFreq = getFreqMHz("${GPU_PATH}target_freq")
+
+        val availableFreqs = FileUtils.readFileAsRoot("${GPU_PATH}available_frequencies")
+            ?.split(" ")
+            ?.mapNotNull { it.toLongOrNull()?.let { freq -> "${freq / 1000000} MHz" } }
+            ?: emptyList()
+
+        val availableGovernors = FileUtils.readFileAsRoot("${GPU_PATH}available_governors")
+            ?.split(" ")
+            ?.filter { it.isNotBlank() }
+            ?: emptyList()
+
+        val currentGovernor = FileUtils.readFileAsRoot("${GPU_PATH}governor")?.trim() ?: "N/A"
+
+        DevfreqInfo(
+            name = "Mali GPU",
+            path = GPU_PATH,
+            maxFreqMHz = maxFreq,
+            minFreqMHz = minFreq,
+            curFreqMHz = curFreq,
+            targetFreqMHz = targetFreq,
+            availableFrequenciesMHz = availableFreqs,
+            availableGovernors = availableGovernors,
+            currentGovernor = currentGovernor
+        )
     }
 
-    val maxFreq = getFreqMHz("${GPU_PATH}max_freq")
-    val minFreq = getFreqMHz("${GPU_PATH}min_freq")
-    val curFreq = getFreqMHz("${GPU_PATH}cur_freq")
-    val targetFreq = getFreqMHz("${GPU_PATH}target_freq")
+    suspend fun setGpuMaxFreq(freq: String): Boolean = withContext(Dispatchers.IO) {
+        val freqHz = freq.replace(" MHz", "").toLong() * 1000000
+        FileUtils.writeFileAsRoot("${GPU_PATH}max_freq", freqHz.toString())
+    }
 
-    val availableFreqs = FileUtils.readFileAsRoot("${GPU_PATH}available_frequencies")
-        ?.split(" ")
-        ?.mapNotNull { it.toLongOrNull()?.let { freq -> "${freq / 1000000} MHz" } }
-        ?: emptyList()
-
-    val availableGovernors = FileUtils.readFileAsRoot("${GPU_PATH}available_governors")
-        ?.split(" ")
-        ?.filter { it.isNotBlank() }
-        ?: emptyList()
-
-    val currentGovernor = FileUtils.readFileAsRoot("${GPU_PATH}governor")?.trim() ?: "N/A"
-
-    DevfreqInfo(
-        name = "Mali GPU",
-        path = GPU_PATH,
-        maxFreqMHz = maxFreq,
-        minFreqMHz = minFreq,
-        curFreqMHz = curFreq,
-        targetFreqMHz = targetFreq,
-        availableFrequenciesMHz = availableFreqs,
-        availableGovernors = availableGovernors,
-        currentGovernor = currentGovernor
-    )
-}
-
-suspend fun setGpuMaxFreq(freq: String): Boolean = withContext(Dispatchers.IO) {
-    val freqHz = freq.replace(" MHz", "").toLong() * 1000000
-    FileUtils.writeFileAsRoot("${GPU_PATH}max_freq", freqHz.toString())
-}
-
-suspend fun setGpuMinFreq(freq: String): Boolean = withContext(Dispatchers.IO) {
-    val freqHz = freq.replace(" MHz", "").toLong() * 1000000
-    FileUtils.writeFileAsRoot("${GPU_PATH}min_freq", freqHz.toString())
-}
+    suspend fun setGpuMinFreq(freq: String): Boolean = withContext(Dispatchers.IO) {
+        val freqHz = freq.replace(" MHz", "").toLong() * 1000000
+        FileUtils.writeFileAsRoot("${GPU_PATH}min_freq", freqHz.toString())
+    }
 
     suspend fun setGpuGovernor(governor: String): Boolean = withContext(Dispatchers.IO) {
         FileUtils.writeFileAsRoot("${GPU_PATH}governor", governor)

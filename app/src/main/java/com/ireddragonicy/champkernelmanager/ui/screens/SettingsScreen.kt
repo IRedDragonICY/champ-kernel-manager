@@ -23,7 +23,6 @@ fun SettingsScreen() {
     val app = remember { context.applicationContext as App }
     
     var applyOnBoot by remember { mutableStateOf(app.settings.applyOnBoot) }
-    // Use the app's observable state which will already be in sync with settings
     val useDynamicColors by app.useDynamicColors
     val darkTheme by app.isDarkTheme
     
@@ -56,7 +55,6 @@ fun SettingsScreen() {
                     title = "Use Dynamic Colors",
                     checked = useDynamicColors,
                     onCheckedChange = {
-                        // Use the new App method to update both settings and state
                         app.updateDynamicColors(it)
                     }
                 )
@@ -65,7 +63,6 @@ fun SettingsScreen() {
                     title = "Dark Theme",
                     checked = darkTheme,
                     onCheckedChange = {
-                        // Use the new App method to update both settings and state
                         app.updateTheme(it)
                     }
                 )

@@ -6,27 +6,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
-import com.ireddragonicy.champkernelmanager.ui.components.BatterySection
-import com.ireddragonicy.champkernelmanager.ui.components.CpuSection
-import com.ireddragonicy.champkernelmanager.ui.components.GpuSection
-import com.ireddragonicy.champkernelmanager.ui.components.SystemSection
-import com.ireddragonicy.champkernelmanager.ui.components.ThermalSection
 import com.ireddragonicy.champkernelmanager.data.DataRepository
+import com.ireddragonicy.champkernelmanager.ui.components.*
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -62,10 +48,7 @@ fun HomeScreen(onNavigateToCoreControl: () -> Unit) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = "System Load: $systemLoad",
-                style = MaterialTheme.typography.titleMedium
-            )
+
             CpuSection(
                 refreshTrigger = refreshTrigger,
                 onNavigateToCoreControl = onNavigateToCoreControl

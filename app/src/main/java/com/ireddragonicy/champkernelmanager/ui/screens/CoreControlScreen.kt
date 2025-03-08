@@ -77,7 +77,6 @@ fun CoreControlScreen(onBackPressed: () -> Unit) {
                         onCoreToggle = { core, enabled ->
                             coroutineScope.launch {
                                 if (dataRepository.setCoreState(core, enabled)) {
-                                    // Update the local state to reflect the change
                                     coreControlInfo = dataRepository.getCoreControlInfo()
                                 }
                             }

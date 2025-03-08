@@ -32,12 +32,14 @@ fun CoreControlGrid(
 ) {
     // Create a map of core numbers to their cluster names
     val coreToClusterMap = cpuClusters.flatMap { cluster ->
-        cluster.cores.map { core -> core.coreNumber to cluster.clusterName }
+        cluster.cores.map { core -> core.core to cluster.name }
     }.toMap()
 
-    // Create a map of core numbers to their current frequency
-    val coreToFreqMap = cpuClusters.flatMap { cluster ->
-        cluster.cores.map { core -> core.coreNumber to core.curFreqMHz }
+    // Create a map of core numbers to their current frequency and scaling max freq
+    val coreInfoMap = cpuClusters.flatMap { cluster ->
+        cluster.cores.map { core ->
+            core.core to Pair(core.curFreqMHz, core.scalingMaxFreqMHz)
+        }
     }.toMap()
 
     // Group cores by pairs to create rows with two cores each
@@ -54,13 +56,14 @@ fun CoreControlGrid(
             ) {
                 rowCores.forEach { (core, online) ->
                     val clusterName = coreToClusterMap[core] ?: "Unknown"
-                    val frequency = coreToFreqMap[core] ?: "N/A"
+                    val (currentFreq, maxFreq) = coreInfoMap[core] ?: Pair("N/A", "N/A")
 
                     CoreCard(
                         core = core,
                         online = online,
                         clusterType = clusterName,
-                        frequency = frequency,
+                        currentFreq = currentFreq,
+                        maxFreq = maxFreq,
                         modifier = Modifier.weight(1f),
                         onToggle = { onCoreToggle(core, !online) }
                     )
@@ -81,7 +84,8 @@ fun CoreCard(
     core: Int,
     online: Boolean,
     clusterType: String,
-    frequency: String,
+    currentFreq: String,
+    maxFreq: String,
     modifier: Modifier = Modifier,
     onToggle: () -> Unit
 ) {
@@ -92,7 +96,7 @@ fun CoreCard(
         MaterialTheme.colorScheme.error
 
     ElevatedCard(
-        onClick = { if (core != 0) onToggle() }, // Core 0 can't be toggled
+        onClick = { if (core != 0) onToggle() },
         enabled = core != 0,
         modifier = modifier,
         elevation = CardDefaults.elevatedCardElevation(
@@ -152,13 +156,24 @@ fun CoreCard(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            Text(
-                text = frequency,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.fillMaxWidth()
-            )
+            ) {
+                Text(
+                    text = currentFreq,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+
+                Text(
+                    text = "Max: $maxFreq",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }

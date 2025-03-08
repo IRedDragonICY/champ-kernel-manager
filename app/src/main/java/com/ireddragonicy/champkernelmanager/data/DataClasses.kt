@@ -1,16 +1,18 @@
 package com.ireddragonicy.champkernelmanager.data
 
+
 data class CpuCoreInfo(
-    val coreNumber: Int,
+    val core: Int,
     val curFreqMHz: String,
-    val maxFreqMHz: String,
+    val hwMaxFreqMHz: String,
+    val scalingMaxFreqMHz: String,
     val minFreqMHz: String,
     val governor: String,
     val online: Boolean
 )
 
 data class CpuClusterInfo(
-    val clusterName: String,
+    val name: String,
     val cores: List<CpuCoreInfo>
 )
 
