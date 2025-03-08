@@ -45,17 +45,17 @@ fun CpuSection(refreshTrigger: Int) {
     var clusters by remember { mutableStateOf<List<CpuClusterInfo>>(emptyList()) }
     var availableGovernors by remember { mutableStateOf<List<String>>(emptyList()) }
     var coreControlInfo by remember { mutableStateOf<DataRepository.CoreControlInfo?>(null) }
-    
+
     val context = LocalContext.current
     val dataRepository = DataRepository.getInstance()
     val coroutineScope = rememberCoroutineScope()
-    
+
     LaunchedEffect(refreshTrigger) {
         clusters = dataRepository.getCpuClusters()
         availableGovernors = dataRepository.getAvailableGovernors()
         coreControlInfo = dataRepository.getCoreControlInfo()
     }
-    
+
     SectionCard(
         title = "CPU",
         expanded = expanded,
@@ -66,7 +66,7 @@ fun CpuSection(refreshTrigger: Int) {
                 ClusterCard(cluster = cluster)
                 Spacer(modifier = Modifier.height(8.dp))
             }
-            
+
             if (clusters.isNotEmpty()) {
                 if (availableGovernors.isNotEmpty()) {
                     Text(
@@ -74,7 +74,7 @@ fun CpuSection(refreshTrigger: Int) {
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
                     )
-                    
+
                     GovernorSelector(
                         currentGovernor = clusters.firstOrNull()?.cores?.firstOrNull()?.governor ?: "unknown",
                         availableGovernors = availableGovernors,
@@ -85,7 +85,7 @@ fun CpuSection(refreshTrigger: Int) {
                         }
                     )
                 }
-                
+
                 coreControlInfo?.let { coreControl ->
                     if (coreControl.supported) {
                         Text(
@@ -93,9 +93,11 @@ fun CpuSection(refreshTrigger: Int) {
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
                         )
-                        
-                        CoreControlPanel(
+
+                        // Use the new CoreControlGrid instead
+                        CoreControlGrid(
                             coreControl = coreControl,
+                            cpuClusters = clusters,
                             onCoreToggle = { core, enabled ->
                                 coroutineScope.launch {
                                     dataRepository.setCoreState(core, enabled)
@@ -126,7 +128,7 @@ fun ClusterCard(cluster: CpuClusterInfo) {
                 style = MaterialTheme.typography.titleSmall
             )
             Divider(modifier = Modifier.padding(vertical = 8.dp))
-            
+
             cluster.cores.forEach { core ->
                 CoreInfo(core = core)
             }
@@ -160,44 +162,16 @@ fun GovernorSelector(
     onGovernorSelected: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    
+
     SettingsDropdown(
         title = "Governor",
         current = currentGovernor,
         options = availableGovernors,
         expanded = expanded,
         onExpandChange = { expanded = it },
-        onOptionSelected = { 
+        onOptionSelected = {
             onGovernorSelected(it)
             expanded = false
         }
     )
-}
-
-@Composable
-fun CoreControlPanel(
-    coreControl: DataRepository.CoreControlInfo,
-    onCoreToggle: (Int, Boolean) -> Unit
-) {
-    Column {
-        coreControl.cores.forEach { (core, enabled) ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Core $core",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                SwitchWithLabel(
-                    checked = enabled,
-                    onCheckedChange = { onCoreToggle(core, it) },
-                    label = if (enabled) "Enabled" else "Disabled"
-                )
-            }
-        }
-    }
 }
