@@ -3,9 +3,9 @@ package com.ireddragonicy.champkernelmanager.data
 import android.os.SystemClock
 import com.ireddragonicy.champkernelmanager.utils.FileUtils
 import java.io.File
-import java.text.DecimalFormat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.Locale
 
 class DataRepository private constructor() {
     companion object {
@@ -20,7 +20,7 @@ class DataRepository private constructor() {
         }
         
         // CPU paths
-        private const val CPU_PATH = "/sys/devices/system/cpu/"
+        private const val CPU_PATH = "/sys/devices/system/cpu/cpu"
         private const val CPU_FREQ_PATH = "/cpufreq/"
         private const val CPU_ONLINE_PATH = "/online"
         
@@ -289,8 +289,8 @@ class DataRepository private constructor() {
         val hours = uptimeSeconds / 3600
         val minutes = (uptimeSeconds % 3600) / 60
         val seconds = uptimeSeconds % 60
-        val uptime = String.format("%02d:%02d:%02d", hours, minutes, seconds)
-        
+        val uptime = String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)
+
         val selinuxStatus = FileUtils.readFileAsRoot("getenforce") ?: "Unknown"
         
         // I/O Scheduler
