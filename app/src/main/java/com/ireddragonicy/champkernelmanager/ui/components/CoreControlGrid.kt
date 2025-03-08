@@ -30,19 +30,16 @@ fun CoreControlGrid(
     cpuClusters: List<CpuClusterInfo>,
     onCoreToggle: (Int, Boolean) -> Unit
 ) {
-    // Create a map of core numbers to their cluster names
     val coreToClusterMap = cpuClusters.flatMap { cluster ->
         cluster.cores.map { core -> core.core to cluster.name }
     }.toMap()
 
-    // Create a map of core numbers to their current frequency and scaling max freq
     val coreInfoMap = cpuClusters.flatMap { cluster ->
         cluster.cores.map { core ->
             core.core to Pair(core.curFreqMHz, core.scalingMaxFreqMHz)
         }
     }.toMap()
 
-    // Group cores by pairs to create rows with two cores each
     val coreRows = coreControl.cores.entries.chunked(2)
 
     Column(
@@ -69,7 +66,6 @@ fun CoreControlGrid(
                     )
                 }
 
-                // If we have an odd number of cores, add a spacer for the last row
                 if (rowCores.size == 1) {
                     Spacer(modifier = Modifier.weight(1f))
                 }

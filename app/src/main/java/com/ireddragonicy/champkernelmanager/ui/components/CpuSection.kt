@@ -2,12 +2,14 @@ package com.ireddragonicy.champkernelmanager.ui.components
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ireddragonicy.champkernelmanager.data.CpuClusterInfo
 import com.ireddragonicy.champkernelmanager.data.CpuCoreInfo
@@ -19,7 +21,6 @@ fun CpuSection(
     refreshTrigger: Int,
     onNavigateToCoreControl: () -> Unit
 ) {
-    var expanded by remember { mutableStateOf(true) }
     var clusters by remember { mutableStateOf<List<CpuClusterInfo>>(emptyList()) }
     var availableGovernors by remember { mutableStateOf<List<String>>(emptyList()) }
     var coreControlInfo by remember { mutableStateOf<DataRepository.CoreControlInfo?>(null) }
@@ -54,176 +55,178 @@ fun CpuSection(
         }.toMap()
     }
 
-    SectionCard(
-        title = "CPU",
-        expanded = expanded,
-        onExpandToggle = { expanded = !expanded }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp)
+        // Title
+        Text(
+            text = "CPU",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
+        // Core frequency grid with modern styling
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            ),
+            shape = MaterialTheme.shapes.large
         ) {
-            // Core frequency grid with modern styling
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                ),
-                shape = MaterialTheme.shapes.large
+            Column(
+                modifier = Modifier.padding(16.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        text = "Core Frequencies",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
+                Text(
+                    text = "Core Frequencies",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
 
-                    // Cluster legend
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        clusters.forEach { cluster ->
-                            val color = clusterColors[cluster.name]
-                                ?: MaterialTheme.colorScheme.primaryContainer
-                            ClusterLegendItem(
-                                clusterName = cluster.name,
-                                color = color,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-
-                    // Use a non-lazy grid approach with rows of cores
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        // Calculate how many rows we need with 4 cores per row
-                        val rowCount = (cores.size + 3) / 4
-
-                        for (rowIndex in 0 until rowCount) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                // For each row, take up to 4 cores
-                                val startIdx = rowIndex * 4
-                                val endIdx = minOf(startIdx + 4, cores.size)
-
-                                for (i in startIdx until endIdx) {
-                                    val clusterName = coreToClusterMap[cores[i].core] ?: "Unknown"
-                                    val color = clusterColors[clusterName]
-                                        ?: MaterialTheme.colorScheme.primaryContainer
-
-                                    CoreFrequencyItem(
-                                        core = cores[i],
-                                        backgroundColor = color,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-
-                                // Add placeholders if the row isn't complete
-                                repeat(4 - (endIdx - startIdx)) {
-                                    Spacer(modifier = Modifier.weight(1f))
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // System info card with modern styling
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                ),
-                shape = MaterialTheme.shapes.large
-            ) {
-                Column(
+                // Cluster legend
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = "System Information",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 4.dp)
-                    )
-
-                    CpuInfoRow(title = "System Load:", value = systemLoad)
-
-                    // Divider for visual separation
-                    Divider(
-                        modifier = Modifier.padding(vertical = 4.dp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                    )
-
-                    Text(
-                        text = "Cluster Frequencies",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Medium
-                    )
-
-                    // Cluster frequency info with color coding
-                    clusters.forEachIndexed { index, cluster ->
-                        val clusterColor = clusterColors[cluster.name]
+                    clusters.forEach { cluster ->
+                        val color = clusterColors[cluster.name]
                             ?: MaterialTheme.colorScheme.primaryContainer
-
-                        val hwMaxFreq = cluster.cores.firstOrNull()?.hwMaxFreqMHz ?: "N/A"
-                        val scalingMaxFreq = cluster.cores.firstOrNull()?.scalingMaxFreqMHz ?: "N/A"
-
-                        ClusterInfoCard(
+                        ClusterLegendItem(
                             clusterName = cluster.name,
-                            hwMaxFreq = hwMaxFreq,
-                            scalingMaxFreq = scalingMaxFreq,
-                            color = clusterColor
+                            color = color,
+                            modifier = Modifier.weight(1f)
                         )
                     }
+                }
 
-                    // Divider before governor section
-                    Divider(
-                        modifier = Modifier.padding(vertical = 4.dp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                    )
+                // Use a non-lazy grid approach with rows of cores
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Calculate how many rows we need with 4 cores per row
+                    val rowCount = (cores.size + 3) / 4
 
-                    // Governor selector
-                    Text(
-                        text = "CPU Governor",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Medium
-                    )
+                    for (rowIndex in 0 until rowCount) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // For each row, take up to 4 cores
+                            val startIdx = rowIndex * 4
+                            val endIdx = minOf(startIdx + 4, cores.size)
 
-                    val currentGovernor = cores.firstOrNull()?.governor ?: "unknown"
-                    GovernorSelector(
-                        currentGovernor = currentGovernor,
-                        availableGovernors = availableGovernors,
-                        onGovernorSelected = { governor ->
-                            coroutineScope.launch {
-                                dataRepository.setAllCoresGovernor(governor)
+                            for (i in startIdx until endIdx) {
+                                val clusterName = coreToClusterMap[cores[i].core] ?: "Unknown"
+                                val color = clusterColors[clusterName]
+                                    ?: MaterialTheme.colorScheme.primaryContainer
+
+                                CoreFrequencyItem(
+                                    core = cores[i],
+                                    backgroundColor = color,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+
+                            // Add placeholders if the row isn't complete
+                            repeat(4 - (endIdx - startIdx)) {
+                                Spacer(modifier = Modifier.weight(1f))
                             }
                         }
-                    )
+                    }
                 }
             }
+        }
 
-            // Add core control section if supported
-            coreControlInfo?.let { info ->
-                if (info.supported) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    CoreControlCard(onNavigate = onNavigateToCoreControl)
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // System info card with modern styling
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            ),
+            shape = MaterialTheme.shapes.large
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "System Information",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+
+                CpuInfoRow(title = "System Load:", value = systemLoad)
+
+                // Divider for visual separation
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 4.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                )
+
+                Text(
+                    text = "Cluster Frequencies",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium
+                )
+
+                // Cluster frequency info with color coding
+                clusters.forEachIndexed { index, cluster ->
+                    val clusterColor = clusterColors[cluster.name]
+                        ?: MaterialTheme.colorScheme.primaryContainer
+
+                    val hwMaxFreq = cluster.cores.firstOrNull()?.hwMaxFreqMHz ?: "N/A"
+                    val scalingMaxFreq = cluster.cores.firstOrNull()?.scalingMaxFreqMHz ?: "N/A"
+
+                    ClusterInfoCard(
+                        clusterName = cluster.name,
+                        hwMaxFreq = hwMaxFreq,
+                        scalingMaxFreq = scalingMaxFreq,
+                        color = clusterColor
+                    )
                 }
+
+                // Divider before governor section
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 4.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                )
+
+                // Governor selector
+                Text(
+                    text = "CPU Governor",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium
+                )
+
+                val currentGovernor = cores.firstOrNull()?.governor ?: "unknown"
+                GovernorSelector(
+                    currentGovernor = currentGovernor,
+                    availableGovernors = availableGovernors,
+                    onGovernorSelected = { governor ->
+                        coroutineScope.launch {
+                            dataRepository.setAllCoresGovernor(governor)
+                        }
+                    }
+                )
+            }
+        }
+
+        // Add core control section if supported
+        coreControlInfo?.let { info ->
+            if (info.supported) {
+                Spacer(modifier = Modifier.height(16.dp))
+                CoreControlCard(onNavigate = onNavigateToCoreControl)
             }
         }
     }
@@ -296,6 +299,17 @@ fun ClusterInfoCard(
 
 @Composable
 fun CoreFrequencyItem(core: CpuCoreInfo, backgroundColor: Color, modifier: Modifier = Modifier) {
+    // Parse the frequency value - extract just the number part and the unit
+    val freqText = core.curFreqMHz
+    val freqValueAndUnit = if (freqText.contains("MHz", ignoreCase = true)) {
+        // Split at "MHz" to get frequency value
+        val parts = freqText.replace("MHz", "").trim() to "MHz"
+        parts
+    } else {
+        // If no "MHz", just use as is
+        freqText to ""
+    }
+
     ElevatedCard(
         modifier = modifier.aspectRatio(1f),
         colors = CardDefaults.elevatedCardColors(
@@ -311,25 +325,46 @@ fun CoreFrequencyItem(core: CpuCoreInfo, backgroundColor: Color, modifier: Modif
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(8.dp),
+                .padding(4.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             Text(
                 text = "CPU ${core.core}",
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Clip
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
+            if (core.online) {
+                // Display frequency value on its own line if it's long
+                Text(
+                    text = freqValueAndUnit.first,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Visible
+                )
 
-            Text(
-                text = core.curFreqMHz,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
+                // Unit on another line
+                Text(
+                    text = freqValueAndUnit.second,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Normal,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
+                )
+            } else {
+                Text(
+                    text = "Offline",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }
