@@ -31,12 +31,12 @@ import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen() {
+fun HomeScreen(onNavigateToCoreControl: () -> Unit) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     var systemLoad by remember { mutableStateOf("") }
     var refreshTrigger by remember { mutableStateOf(0) }
     val dataRepository = DataRepository.getInstance()
-    
+
     LaunchedEffect(Unit) {
         while (true) {
             systemLoad = dataRepository.getSystemLoad()
@@ -66,8 +66,10 @@ fun HomeScreen() {
                 text = "System Load: $systemLoad",
                 style = MaterialTheme.typography.titleMedium
             )
-
-            CpuSection(refreshTrigger = refreshTrigger)
+            CpuSection(
+                refreshTrigger = refreshTrigger,
+                onNavigateToCoreControl = onNavigateToCoreControl
+            )
             GpuSection(refreshTrigger = refreshTrigger)
             BatterySection(refreshTrigger = refreshTrigger)
             ThermalSection(refreshTrigger = refreshTrigger)
