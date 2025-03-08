@@ -3,6 +3,7 @@ package com.ireddragonicy.champkernelmanager
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.widget.Toast
+import com.ireddragonicy.champkernelmanager.utils.FileUtils
 
 class GovernorTileService : TileService() {
     companion object {
@@ -26,7 +27,7 @@ class GovernorTileService : TileService() {
 
     private fun toggleGovernor(): String? {
         // Get available governors
-        val availableGovs = FileUtils.readFile(CPU_AVAILABLE_GOVERNORS_PATH)
+        val availableGovs = FileUtils.readFileAsRoot(CPU_AVAILABLE_GOVERNORS_PATH)
             ?.split(" ")
             ?.filter { it.isNotBlank() }
             ?.takeIf { it.isNotEmpty() }

@@ -1,9 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Champ Kernel Manager</string>
-    <string name="cpu">CPU</string>
-    <string name="devfreq">GPU/Devfreq</string>
-    <string name="settings">Settings</string>
-    <string name="cpu_screen_title">CPU Control</string>
-    <string name="devfreq_screen_title">GPU &amp; Devfreq Control</string>
-    <string name="settings_screen_title">Settings</string>
+    <string name="apply_settings">Apply Settings</string>
+    <string name="app_settings">App Settings</string>
+    <string name="apply_on_boot">Apply settings on boot</string>
+    <string name="dark_theme">Dark Theme</string>
+    <string name="dynamic_colors">Use dynamic colors</string>
+    <string name="custom_palette">Custom color palette</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="warning">Warning</string>
+    <string name="thermal_warning">Disabling thermal services may cause your device to overheat!</string>
 </resources>
