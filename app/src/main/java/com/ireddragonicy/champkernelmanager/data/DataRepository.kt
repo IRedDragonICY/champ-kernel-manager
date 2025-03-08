@@ -10,7 +10,7 @@ import java.util.Locale
 class DataRepository private constructor() {
     companion object {
         private var INSTANCE: DataRepository? = null
-        
+
         fun getInstance(): DataRepository {
             return INSTANCE ?: synchronized(this) {
                 val instance = DataRepository()
@@ -18,133 +18,122 @@ class DataRepository private constructor() {
                 instance
             }
         }
-        
-        // CPU paths
+
         private const val CPU_PATH = "/sys/devices/system/cpu/cpu"
         private const val CPU_FREQ_PATH = "/cpufreq/"
         private const val CPU_ONLINE_PATH = "/online"
-        
-        // GPU paths
+
         private const val GPU_PATH = "/sys/class/devfreq/13000000.mali/"
-        
-        // Battery paths
+
         private const val BATTERY_PATH = "/sys/class/power_supply/battery/"
-        
-        // System paths
+
         private const val TCP_CONGESTION_PATH = "/proc/sys/net/ipv4/tcp_congestion_control"
         private const val AVAILABLE_TCP_CONGESTION_PATH = "/proc/sys/net/ipv4/tcp_available_congestion_control"
         private const val IO_SCHEDULER_PATH = "/sys/block/mmcblk0/queue/scheduler"
     }
-    
+
     data class CoreControlInfo(
         val supported: Boolean,
         val cores: Map<Int, Boolean>
     )
-    
+
     suspend fun getSystemLoad(): String = withContext(Dispatchers.IO) {
         FileUtils.readFileAsRoot("/proc/loadavg")?.split(" ")?.take(3)?.joinToString(" ") ?: "N/A"
     }
-    
+
     suspend fun getCpuClusters(): List<CpuClusterInfo> = withContext(Dispatchers.IO) {
         val coreCount = Runtime.getRuntime().availableProcessors()
         val cpuCoreInfos = (0 until coreCount).map { core ->
             val basePath = "$CPU_PATH$core$CPU_FREQ_PATH"
             val onlinePath = "$CPU_PATH$core$CPU_ONLINE_PATH"
-            
+
             fun getFreqMHz(freqPath: String): String {
                 val freqKHz = FileUtils.readFileAsRoot(freqPath)?.toLongOrNull() ?: 0
                 return "${freqKHz / 1000} MHz"
             }
-            
+
             val curFreq = getFreqMHz(basePath + "scaling_cur_freq")
-            val maxFreq = getFreqMHz(basePath + "scaling_max_freq")
+            val maxFreq = getFreqMHz(basePath + "cpuinfo_max_freq")
             val minFreq = getFreqMHz(basePath + "scaling_min_freq")
             val governor = FileUtils.readFileAsRoot(basePath + "scaling_governor") ?: "N/A"
             val online = FileUtils.readFileAsRoot(onlinePath) == "1" || core == 0
-            
+
             CpuCoreInfo(core, curFreq, maxFreq, minFreq, governor, online)
         }
-        
-        // Group by max frequency to identify clusters
-        val groups = cpuCoreInfos.groupBy { it.maxFreqMHz }
-        
-        if (groups.size > 1) {
-            groups.toList()
-                .sortedBy { it.first.split(" ").firstOrNull()?.toLongOrNull() ?: Long.MAX_VALUE }
-                .mapIndexed { index, (_, cores) ->
-                    val name = when (groups.size) {
-                        2 -> if (index == 0) "Little" else "Big"
-                        3 -> when (index) {
-                            0 -> "Little"
-                            1 -> "Medium"
-                            else -> "Big"
-                        }
-                        else -> "Cluster ${index + 1}"
-                    }
-                    CpuClusterInfo(name, cores)
-                }
-        } else {
-            listOf(CpuClusterInfo("Single Cluster", cpuCoreInfos))
+
+        val groups = cpuCoreInfos.groupBy {
+            it.maxFreqMHz.split(" ").firstOrNull()?.toLongOrNull() ?: 0L
+        }
+
+        val sortedGroups = groups.toList().sortedBy { it.first }
+
+        val names = when (sortedGroups.size) {
+            2 -> listOf("Little", "Big")
+            3 -> listOf("Little", "Big", "Prime")
+            else -> sortedGroups.mapIndexed { index, _ -> "Cluster ${index + 1}" }
+        }
+
+        sortedGroups.mapIndexed { index, pair ->
+            CpuClusterInfo(names[index], pair.second)
         }
     }
-    
+
     suspend fun getAvailableGovernors(): List<String> = withContext(Dispatchers.IO) {
         FileUtils.readFileAsRoot("${CPU_PATH}cpu0${CPU_FREQ_PATH}scaling_available_governors")
             ?.split(" ")
             ?.filter { it.isNotBlank() }
             ?: emptyList()
     }
-    
+
     suspend fun setAllCoresGovernor(governor: String) = withContext(Dispatchers.IO) {
         val coreCount = Runtime.getRuntime().availableProcessors()
         (0 until coreCount).all { core ->
             FileUtils.writeFileAsRoot("${CPU_PATH}cpu$core${CPU_FREQ_PATH}scaling_governor", governor)
         }
     }
-    
+
     suspend fun getCoreControlInfo(): CoreControlInfo = withContext(Dispatchers.IO) {
         val coreCount = Runtime.getRuntime().availableProcessors()
         val coreStatus = (0 until coreCount).associate { core ->
             val onlinePath = "$CPU_PATH$core$CPU_ONLINE_PATH"
-            val isCore0 = core == 0 // Core 0 is always online and can't be disabled
+            val isCore0 = core == 0
             val online = if (isCore0) true else FileUtils.readFileAsRoot(onlinePath) == "1"
             core to online
         }
-        
-        // Core control is supported if we can read the online status of cores
+
         val supported = coreStatus.any { !it.value } || coreStatus.size > 1
-        
+
         CoreControlInfo(supported, coreStatus)
     }
-    
+
     suspend fun setCoreState(core: Int, enabled: Boolean): Boolean = withContext(Dispatchers.IO) {
-        if (core == 0) return@withContext false // Can't disable core 0
+        if (core == 0) return@withContext false
         FileUtils.writeFileAsRoot("$CPU_PATH$core$CPU_ONLINE_PATH", if (enabled) "1" else "0")
     }
-    
+
     suspend fun getGpuInfo(): DevfreqInfo = withContext(Dispatchers.IO) {
         fun getFreqMHz(freqPath: String): String {
             val freqKHz = FileUtils.readFileAsRoot(freqPath)?.toLongOrNull() ?: 0
             return "${freqKHz / 1000} MHz"
         }
-        
+
         val maxFreq = getFreqMHz("${GPU_PATH}max_freq")
         val minFreq = getFreqMHz("${GPU_PATH}min_freq")
         val curFreq = getFreqMHz("${GPU_PATH}cur_freq")
         val targetFreq = getFreqMHz("${GPU_PATH}target_freq")
-        
+
         val availableFreqs = FileUtils.readFileAsRoot("${GPU_PATH}available_frequencies")
             ?.split(" ")
             ?.mapNotNull { it.toLongOrNull()?.let { freq -> "${freq / 1000} MHz" } }
             ?: emptyList()
-        
+
         val availableGovernors = FileUtils.readFileAsRoot("${GPU_PATH}available_governors")
             ?.split(" ")
             ?.filter { it.isNotBlank() }
             ?: emptyList()
-        
+
         val currentGovernor = FileUtils.readFileAsRoot("${GPU_PATH}governor")?.trim() ?: "N/A"
-        
+
         DevfreqInfo(
             name = "Mali GPU",
             path = GPU_PATH,
@@ -157,21 +146,21 @@ class DataRepository private constructor() {
             currentGovernor = currentGovernor
         )
     }
-    
+
     suspend fun setGpuMaxFreq(freq: String): Boolean = withContext(Dispatchers.IO) {
         val freqKHz = freq.replace(" MHz", "").toLong() * 1000
         FileUtils.writeFileAsRoot("${GPU_PATH}max_freq", freqKHz.toString())
     }
-    
+
     suspend fun setGpuMinFreq(freq: String): Boolean = withContext(Dispatchers.IO) {
         val freqKHz = freq.replace(" MHz", "").toLong() * 1000
         FileUtils.writeFileAsRoot("${GPU_PATH}min_freq", freqKHz.toString())
     }
-    
+
     suspend fun setGpuGovernor(governor: String): Boolean = withContext(Dispatchers.IO) {
         FileUtils.writeFileAsRoot("${GPU_PATH}governor", governor)
     }
-    
+
     suspend fun getBatteryInfo(): BatteryInfo = withContext(Dispatchers.IO) {
         val status = FileUtils.readFileAsRoot("${BATTERY_PATH}status") ?: "Unknown"
         val level = FileUtils.readFileAsRoot("${BATTERY_PATH}capacity")?.toIntOrNull() ?: 0
@@ -181,19 +170,17 @@ class DataRepository private constructor() {
         val voltage = FileUtils.readFileAsRoot("${BATTERY_PATH}voltage_now")?.toIntOrNull()?.div(1000) ?: 0
         val health = FileUtils.readFileAsRoot("${BATTERY_PATH}health") ?: "Unknown"
         val technology = FileUtils.readFileAsRoot("${BATTERY_PATH}technology") ?: "Unknown"
-        
-        // Check for fast charge support
+
         val fastChargeSupported = File("/sys/kernel/fast_charge/force_fast_charge").exists()
         val fastChargeEnabled = if (fastChargeSupported) {
             FileUtils.readFileAsRoot("/sys/kernel/fast_charge/force_fast_charge") == "1"
         } else false
-        
-        // Check for charging limit support
+
         val chargingLimitSupported = File("/sys/class/power_supply/battery/charge_control_limit").exists()
         val chargingLimit = if (chargingLimitSupported) {
             FileUtils.readFileAsRoot("/sys/class/power_supply/battery/charge_control_limit")?.toIntOrNull() ?: 100
         } else 100
-        
+
         BatteryInfo(
             status = status,
             level = level,
@@ -208,43 +195,40 @@ class DataRepository private constructor() {
             chargingLimit = chargingLimit
         )
     }
-    
+
     suspend fun setFastCharge(enabled: Boolean): Boolean = withContext(Dispatchers.IO) {
         FileUtils.writeFileAsRoot("/sys/kernel/fast_charge/force_fast_charge", if (enabled) "1" else "0")
     }
-    
+
     suspend fun setChargingLimit(limit: Int): Boolean = withContext(Dispatchers.IO) {
         FileUtils.writeFileAsRoot("/sys/class/power_supply/battery/charge_control_limit", limit.toString())
     }
-    
+
     suspend fun getThermalInfo(): ThermalInfo = withContext(Dispatchers.IO) {
         val thermalZones = mutableListOf<ThermalZone>()
         val thermalPath = "/sys/class/thermal/"
-        
-        // Get thermal zones
+
         val thermalDir = File(thermalPath)
         if (thermalDir.exists() && thermalDir.isDirectory) {
             thermalDir.list()?.filter { it.startsWith("thermal_zone") }?.forEach { zone ->
                 val tempPath = "$thermalPath$zone/temp"
                 val typePath = "$thermalPath$zone/type"
-                
+
                 val temp = FileUtils.readFileAsRoot(tempPath)?.toFloatOrNull()?.div(1000) ?: 0f
                 val type = FileUtils.readFileAsRoot(typePath) ?: zone
-                
+
                 thermalZones.add(ThermalZone(type, temp))
             }
         }
-        
-        // Check thermal services status
+
         val thermaldRunning = FileUtils.runCommandAsRoot("getprop init.svc.thermald") == "running"
         val miThermaldRunning = FileUtils.runCommandAsRoot("getprop init.svc.mi_thermald") == "running"
         val vendorThermaldRunning = FileUtils.runCommandAsRoot("getprop init.svc.vendor.thermal-mediatek") == "running"
         val thermalServicesEnabled = thermaldRunning || miThermaldRunning || vendorThermaldRunning
-        
-        // Get thermal profiles if available
+
         val thermalProfiles = listOf("Balanced", "Performance", "Battery", "Gaming")
         val currentProfile = FileUtils.readFileAsRoot("/sys/class/thermal/thermal_policy") ?: "Default"
-        
+
         ThermalInfo(
             zones = thermalZones,
             thermalServicesEnabled = thermalServicesEnabled,
@@ -252,7 +236,7 @@ class DataRepository private constructor() {
             currentProfile = currentProfile
         )
     }
-    
+
     suspend fun setThermalServices(enabled: Boolean): Boolean = withContext(Dispatchers.IO) {
         if (enabled) {
             val commands = listOf(
@@ -272,19 +256,18 @@ class DataRepository private constructor() {
             commands.all { FileUtils.runCommandAsRoot(it) != null }
         }
     }
-    
+
     suspend fun setThermalProfile(profile: String): Boolean = withContext(Dispatchers.IO) {
         FileUtils.writeFileAsRoot("/sys/class/thermal/thermal_policy", profile)
     }
-    
+
     suspend fun getSystemInfo(): SystemInfo = withContext(Dispatchers.IO) {
         val kernelVersion = FileUtils.readFileAsRoot("uname -r") ?: "Unknown"
         val kernelBuild = FileUtils.readFileAsRoot("cat /proc/version") ?: "Unknown"
         val cpuArch = FileUtils.readFileAsRoot("uname -m") ?: "Unknown"
         val deviceModel = FileUtils.readFileAsRoot("getprop ro.product.model") ?: "Unknown"
         val androidVersion = FileUtils.readFileAsRoot("getprop ro.build.version.release") ?: "Unknown"
-        
-        // Calculate uptime
+
         val uptimeSeconds = SystemClock.elapsedRealtime() / 1000
         val hours = uptimeSeconds / 3600
         val minutes = (uptimeSeconds % 3600) / 60
@@ -292,19 +275,17 @@ class DataRepository private constructor() {
         val uptime = String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)
 
         val selinuxStatus = FileUtils.readFileAsRoot("getenforce") ?: "Unknown"
-        
-        // I/O Scheduler
+
         val ioSchedulerData = FileUtils.readFileAsRoot(IO_SCHEDULER_PATH) ?: ""
         val currentIoScheduler = ioSchedulerData.substringAfter("[").substringBefore("]").takeIf { it.isNotBlank() } ?: "Unknown"
         val availableIoSchedulers = ioSchedulerData.replace("[", "").replace("]", "").split(" ").filter { it.isNotBlank() }
-        
-        // TCP Congestion
+
         val currentTcpCongestion = FileUtils.readFileAsRoot(TCP_CONGESTION_PATH) ?: "Unknown"
         val availableTcpCongestion = FileUtils.readFileAsRoot(AVAILABLE_TCP_CONGESTION_PATH)
             ?.split(" ")
             ?.filter { it.isNotBlank() }
             ?: emptyList()
-        
+
         SystemInfo(
             kernelVersion = kernelVersion,
             kernelBuild = kernelBuild,
@@ -319,11 +300,11 @@ class DataRepository private constructor() {
             currentTcpCongestion = currentTcpCongestion
         )
     }
-    
+
     suspend fun setIoScheduler(scheduler: String): Boolean = withContext(Dispatchers.IO) {
         FileUtils.writeFileAsRoot(IO_SCHEDULER_PATH, scheduler)
     }
-    
+
     suspend fun setTcpCongestion(algorithm: String): Boolean = withContext(Dispatchers.IO) {
         FileUtils.writeFileAsRoot(TCP_CONGESTION_PATH, algorithm)
     }
