@@ -13,6 +13,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ireddragonicy.champkernelmanager.data.CpuClusterInfo
 import com.ireddragonicy.champkernelmanager.data.CpuCoreInfo
+import com.ireddragonicy.champkernelmanager.data.CoreControlInfo
 import com.ireddragonicy.champkernelmanager.data.DataRepository
 import kotlinx.coroutines.launch
 
@@ -23,7 +24,7 @@ fun CpuSection(
 ) {
     var clusters by remember { mutableStateOf<List<CpuClusterInfo>>(emptyList()) }
     var availableGovernors by remember { mutableStateOf<List<String>>(emptyList()) }
-    var coreControlInfo by remember { mutableStateOf<DataRepository.CoreControlInfo?>(null) }
+    var coreControlInfo by remember { mutableStateOf<CoreControlInfo?>(null) }
     var systemLoad by remember { mutableStateOf("N/A") }
     var cores by remember { mutableStateOf<List<CpuCoreInfo>>(emptyList()) }
 
@@ -224,13 +225,14 @@ fun CpuSection(
 
         // Add core control section if supported
         coreControlInfo?.let { info ->
-            if (info.supported) {
+            if (info.cores.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(16.dp))
                 CoreControlCard(onNavigate = onNavigateToCoreControl)
             }
         }
     }
 }
+
 
 @Composable
 fun ClusterLegendItem(

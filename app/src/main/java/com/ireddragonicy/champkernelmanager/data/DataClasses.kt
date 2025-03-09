@@ -12,6 +12,11 @@ data class CpuCoreInfo(
     val temperature: String
 )
 
+data class CoreControlInfo(
+    val supported: Boolean,
+    val cores: Map<Int, Boolean>
+)
+
 data class CpuClusterInfo(
     val name: String,
     val cores: List<CpuCoreInfo>

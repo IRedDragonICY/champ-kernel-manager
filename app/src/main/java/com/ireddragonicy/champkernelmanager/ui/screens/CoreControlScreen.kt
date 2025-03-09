@@ -12,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.ireddragonicy.champkernelmanager.data.CpuClusterInfo
+import com.ireddragonicy.champkernelmanager.data.CoreControlInfo
 import com.ireddragonicy.champkernelmanager.data.DataRepository
 import com.ireddragonicy.champkernelmanager.ui.components.CoreControlGrid
 import kotlinx.coroutines.launch
@@ -19,7 +20,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CoreControlScreen(onBackPressed: () -> Unit) {
-    var coreControlInfo by remember { mutableStateOf<DataRepository.CoreControlInfo?>(null) }
+    var coreControlInfo by remember { mutableStateOf<CoreControlInfo?>(null) }
     var clusters by remember { mutableStateOf<List<CpuClusterInfo>>(emptyList()) }
 
     val dataRepository = DataRepository.getInstance()
@@ -70,7 +71,7 @@ fun CoreControlScreen(onBackPressed: () -> Unit) {
             )
 
             coreControlInfo?.let { coreControl ->
-                if (coreControl.supported) {
+                if (coreControl.cores.isNotEmpty()) {
                     CoreControlGrid(
                         coreControl = coreControl,
                         cpuClusters = clusters,

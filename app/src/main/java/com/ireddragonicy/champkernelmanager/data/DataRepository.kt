@@ -46,10 +46,7 @@ class DataRepository private constructor() {
     suspend fun setIoScheduler(scheduler: String): Boolean = systemManager.setIoScheduler(scheduler)
     suspend fun setTcpCongestion(algorithm: String): Boolean = systemManager.setTcpCongestion(algorithm)
 
-    data class CoreControlInfo(
-        val supported: Boolean,
-        val cores: Map<Int, Boolean>
-    )
+
 }
 
 

@@ -22,11 +22,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.ireddragonicy.champkernelmanager.data.CpuClusterInfo
-import com.ireddragonicy.champkernelmanager.data.DataRepository
+import com.ireddragonicy.champkernelmanager.data.CoreControlInfo
 
 @Composable
 fun CoreControlGrid(
-    coreControl: DataRepository.CoreControlInfo,
+    coreControl: CoreControlInfo,
     cpuClusters: List<CpuClusterInfo>,
     onCoreToggle: (Int, Boolean) -> Unit
 ) {
@@ -51,7 +51,9 @@ fun CoreControlGrid(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                rowCores.forEach { (core, online) ->
+                rowCores.forEach { entry ->
+                    val core = entry.key
+                    val online = entry.value
                     val clusterName = coreToClusterMap[core] ?: "Unknown"
                     val (currentFreq, maxFreq) = coreInfoMap[core] ?: Pair("N/A", "N/A")
 
