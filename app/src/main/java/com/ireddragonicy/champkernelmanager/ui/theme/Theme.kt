@@ -31,11 +31,10 @@ fun ChampKernelManagerTheme(
 ) {
     val context = LocalContext.current
     val app = remember { context.applicationContext as App }
-    
-    // Read from observable state
+
     val darkTheme by app.isDarkTheme
     val useDynamicColors by app.useDynamicColors
-    
+
     val colorScheme = when {
         useDynamicColors && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             if (darkTheme) dynamicDarkColorScheme(context)
@@ -45,13 +44,13 @@ fun ChampKernelManagerTheme(
         else -> LightColorScheme
     }.let { scheme ->
         val customPrimaryColor = app.settings.customPrimaryColor
-        if (customPrimaryColor != null && customPrimaryColor != -1) {
+        if (customPrimaryColor != -1) {
             scheme.copy(primary = androidx.compose.ui.graphics.Color(customPrimaryColor))
         } else {
             scheme
         }
     }
-    
+
     val view = LocalView.current
     if (!view.isInEditMode) {
         DisposableEffect(darkTheme) {
