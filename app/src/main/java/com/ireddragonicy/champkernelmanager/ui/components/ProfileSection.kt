@@ -74,10 +74,7 @@ fun ProfileSection() {
                             dataRepository.setGpuMinFreq(appSettings.savedGpuMinFreq)
                         }
                         
-                        // Load thermal profile
-                        if (appSettings.savedThermalProfile.isNotEmpty()) {
-                            dataRepository.setThermalProfile(appSettings.savedThermalProfile)
-                        }
+
                         
                         // Load IO scheduler
                         if (appSettings.savedIoScheduler.isNotEmpty()) {
@@ -113,10 +110,7 @@ fun ProfileSection() {
                         appSettings.savedGpuMaxFreq = gpuInfo.maxFreqMHz
                         appSettings.savedGpuMinFreq = gpuInfo.minFreqMHz
                         
-                        // Get current thermal profile
-                        val thermalInfo = dataRepository.getThermalInfo()
-                        appSettings.savedThermalProfile = thermalInfo.currentProfile
-                        
+
                         // Get system settings
                         val systemInfo = dataRepository.getSystemInfo()
                         appSettings.savedIoScheduler = systemInfo.currentIoScheduler

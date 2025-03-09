@@ -44,10 +44,7 @@ object BootService {
                 dataRepository.setGpuMinFreq(settings.savedGpuMinFreq)
             }
             
-            // Apply thermal profile
-            if (settings.savedThermalProfile.isNotEmpty()) {
-                dataRepository.setThermalProfile(settings.savedThermalProfile)
-            }
+
             
             // Apply IO scheduler
             if (settings.savedIoScheduler.isNotEmpty()) {

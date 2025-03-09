@@ -78,27 +78,10 @@ fun ThermalSection(refreshTrigger: Int) {
                         modifier = Modifier.padding(top = 8.dp)
                     )
                 }
-                
-                if (thermal.thermalProfiles.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    var expandedProfile by remember { mutableStateOf(false) }
-                    
-                    SettingsDropdown(
-                        title = "Thermal Profile",
-                        current = thermal.currentProfile,
-                        options = thermal.thermalProfiles,
-                        expanded = expandedProfile,
-                        onExpandChange = { expandedProfile = it },
-                        onOptionSelected = { 
-                            coroutineScope.launch {
-                                dataRepository.setThermalProfile(it)
-                                expandedProfile = false
-                            }
-                        }
-                    )
+
+
                 }
             }
-        } ?: Text("Thermal information not available")
+
     }
 }

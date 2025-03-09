@@ -50,9 +50,7 @@ data class ThermalZone(
 
 data class ThermalInfo(
     val zones: List<ThermalZone>,
-    val thermalServicesEnabled: Boolean,
-    val thermalProfiles: List<String> = emptyList(),
-    val currentProfile: String = "Default"
+    val thermalServicesEnabled: Boolean
 )
 
 data class SystemInfo(
