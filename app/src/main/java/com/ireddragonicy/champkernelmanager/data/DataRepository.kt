@@ -26,6 +26,7 @@ class DataRepository private constructor() {
         private const val GPU_PATH = "/sys/class/devfreq/13000000.mali/"
 
         private const val BATTERY_PATH = "/sys/class/power_supply/battery/"
+        private const val THERMAL_PATH = "/sys/class/thermal/"
 
         private const val TCP_CONGESTION_PATH = "/proc/sys/net/ipv4/tcp_congestion_control"
         private const val AVAILABLE_TCP_CONGESTION_PATH = "/proc/sys/net/ipv4/tcp_available_congestion_control"
@@ -41,8 +42,149 @@ class DataRepository private constructor() {
         FileUtils.readFileAsRoot("/proc/loadavg")?.split(" ")?.take(3)?.joinToString(" ") ?: "N/A"
     }
 
+    private suspend fun getCpuTemperatures(): Map<Int, String> = withContext(Dispatchers.IO) {
+        val coreTemps = mutableMapOf<Int, String>()
+        val coreCount = Runtime.getRuntime().availableProcessors()
+
+        // First try to get MediaTek CPU temperature
+        val mtktscpuTemp = getMediaTekCpuTemp()
+
+        for (core in 0 until coreCount) {
+            val paths = listOf(
+                "$CPU_PATH$core/thermal_sensor/temp",
+                "$CPU_PATH$core/temperature",
+                "/sys/devices/virtual/thermal/thermal_zone0/temp"
+            )
+
+            var tempFound = false
+            for (path in paths) {
+                val temp = FileUtils.readFileAsRoot(path)?.toFloatOrNull()
+                if (temp != null) {
+                    coreTemps[core] = String.format(Locale.US, "%.1f°C", temp / 1000)
+                    tempFound = true
+                    break
+                }
+            }
+
+            if (!tempFound) {
+                val thermalDir = File(THERMAL_PATH)
+                if (thermalDir.exists() && thermalDir.isDirectory) {
+                    val zones = thermalDir.list()?.filter { it.startsWith("thermal_zone") } ?: emptyList()
+
+                    for (zone in zones) {
+                        val typePath = "$THERMAL_PATH$zone/type"
+                        val type = FileUtils.readFileAsRoot(typePath) ?: ""
+
+                        // Enhanced pattern matching for MediaTek
+                        if (type.contains("cpu", ignoreCase = true) ||
+                            type.contains("core", ignoreCase = true) ||
+                            type.contains("mtktscpu", ignoreCase = true) ||
+                            type.contains("soc", ignoreCase = true) ||
+                            type.contains("$core", ignoreCase = true)) {
+
+                            val tempPath = "$THERMAL_PATH$zone/temp"
+                            val temp = FileUtils.readFileAsRoot(tempPath)?.toFloatOrNull()
+                            if (temp != null) {
+                                val tempCelsius = temp / 1000
+                                coreTemps[core] = String.format(Locale.US, "%.1f°C", tempCelsius)
+                                tempFound = true
+                                break
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!tempFound) {
+                // Use MediaTek-specific temp if available, otherwise fallback
+                if (mtktscpuTemp != null) {
+                    coreTemps[core] = mtktscpuTemp
+                } else {
+                    val cpuWideTemp = getCpuWideTemperature()
+                    coreTemps[core] = cpuWideTemp ?: "N/A"
+                }
+            }
+        }
+
+        return@withContext coreTemps
+    }
+
+    private suspend fun getMediaTekCpuTemp(): String? = withContext(Dispatchers.IO) {
+        val mtkPaths = listOf(
+            "/sys/devices/virtual/thermal/thermal_zone0/temp",
+            "/sys/class/thermal/thermal_zone0/temp",
+            "/sys/class/mtktscpu/mtktscpu/temp",
+            "/sys/devices/virtual/mtktscpu/mtktscpu/temp",
+            "/sys/kernel/thermal/thermal_zone0/temp"
+        )
+
+        for (path in mtkPaths) {
+            val temp = FileUtils.readFileAsRoot(path)?.toFloatOrNull()
+            if (temp != null) {
+                return@withContext String.format(Locale.US, "%.1f°C", temp / 1000)
+            }
+        }
+
+        val thermalDir = File(THERMAL_PATH)
+        if (thermalDir.exists() && thermalDir.isDirectory) {
+            val zones = thermalDir.list()?.filter { it.startsWith("thermal_zone") } ?: emptyList()
+
+            for (zone in zones) {
+                val typePath = "$THERMAL_PATH$zone/type"
+                val type = FileUtils.readFileAsRoot(typePath) ?: ""
+
+                if (type.contains("mtktscpu", ignoreCase = true) ||
+                    type.contains("cpu", ignoreCase = true) && type.contains("thermal", ignoreCase = true)) {
+                    val tempPath = "$THERMAL_PATH$zone/temp"
+                    val temp = FileUtils.readFileAsRoot(tempPath)?.toFloatOrNull()
+                    if (temp != null) {
+                        return@withContext String.format(Locale.US, "%.1f°C", temp / 1000)
+                    }
+                }
+            }
+        }
+        null
+    }
+
+    private suspend fun getCpuWideTemperature(): String? = withContext(Dispatchers.IO) {
+        val thermalDir = File(THERMAL_PATH)
+        if (thermalDir.exists() && thermalDir.isDirectory) {
+            val zones = thermalDir.list()?.filter { it.startsWith("thermal_zone") } ?: emptyList()
+
+            // MediaTek patterns to look for
+            val mtkPatterns = listOf("mtktscpu", "cpu_thermal", "soc_thermal", "cpu", "core")
+
+            for (zone in zones) {
+                val typePath = "$THERMAL_PATH$zone/type"
+                val type = FileUtils.readFileAsRoot(typePath) ?: ""
+
+                if (mtkPatterns.any { pattern -> type.contains(pattern, ignoreCase = true) }) {
+                    val tempPath = "$THERMAL_PATH$zone/temp"
+                    val temp = FileUtils.readFileAsRoot(tempPath)?.toFloatOrNull()
+                    if (temp != null) {
+                        val tempCelsius = temp / 1000
+                        return@withContext String.format(Locale.US, "%.1f°C", tempCelsius)
+                    }
+                }
+            }
+
+            // As a last resort, just use the first thermal zone
+            if (zones.isNotEmpty()) {
+                val tempPath = "$THERMAL_PATH${zones[0]}/temp"
+                val temp = FileUtils.readFileAsRoot(tempPath)?.toFloatOrNull()
+                if (temp != null) {
+                    val tempCelsius = temp / 1000
+                    return@withContext String.format(Locale.US, "%.1f°C", tempCelsius)
+                }
+            }
+        }
+        null
+    }
+
     suspend fun getCpuClusters(): List<CpuClusterInfo> = withContext(Dispatchers.IO) {
         val coreCount = Runtime.getRuntime().availableProcessors()
+        val coreTemperatures = getCpuTemperatures()
+
         val cpuCoreInfos = (0 until coreCount).map { core ->
             val basePath = "$CPU_PATH$core$CPU_FREQ_PATH"
             val onlinePath = "$CPU_PATH$core$CPU_ONLINE_PATH"
@@ -58,6 +200,7 @@ class DataRepository private constructor() {
             val minFreq = getFreqMHz(basePath + "scaling_min_freq")
             val governor = FileUtils.readFileAsRoot(basePath + "scaling_governor") ?: "N/A"
             val online = FileUtils.readFileAsRoot(onlinePath) == "1" || core == 0
+            val temperature = coreTemperatures[core] ?: "N/A"
 
             CpuCoreInfo(
                 core = core,
@@ -66,11 +209,11 @@ class DataRepository private constructor() {
                 scalingMaxFreqMHz = scalingMaxFreq,
                 minFreqMHz = minFreq,
                 governor = governor,
-                online = online
+                online = online,
+                temperature = temperature
             )
         }
 
-        // Group by hardware maximum frequency to identify clusters
         val groups = cpuCoreInfos.groupBy {
             it.hwMaxFreqMHz.split(" ").firstOrNull()?.toLongOrNull() ?: 0L
         }

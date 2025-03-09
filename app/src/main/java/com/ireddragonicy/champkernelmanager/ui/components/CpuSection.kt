@@ -80,7 +80,7 @@ fun CpuSection(
                 modifier = Modifier.padding(16.dp)
             ) {
                 Text(
-                    text = "Core Frequencies",
+                    text = "Core Frequencies & Temperatures",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(bottom = 12.dp)
@@ -311,7 +311,7 @@ fun CoreFrequencyItem(core: CpuCoreInfo, backgroundColor: Color, modifier: Modif
     }
 
     ElevatedCard(
-        modifier = modifier.aspectRatio(1f),
+        modifier = modifier.aspectRatio(0.9f), // Slightly taller to fit temperature
         colors = CardDefaults.elevatedCardColors(
             containerColor = if (core.online)
                 backgroundColor
@@ -354,6 +354,28 @@ fun CoreFrequencyItem(core: CpuCoreInfo, backgroundColor: Color, modifier: Modif
                     text = freqValueAndUnit.second,
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Normal,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
+                )
+
+                // Add a small divider
+                Spacer(modifier = Modifier.height(2.dp))
+                HorizontalDivider(
+                    modifier = Modifier.width(24.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                    thickness = 1.dp
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+
+                // Display temperature
+                Text(
+                    text = core.temperature,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = if (core.temperature.replace("°C", "").trim().toFloatOrNull()?.let { it > 80 } == true)
+                        MaterialTheme.colorScheme.error
+                    else
+                        MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center,
                     maxLines = 1
                 )

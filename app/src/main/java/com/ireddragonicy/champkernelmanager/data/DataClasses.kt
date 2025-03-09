@@ -8,7 +8,8 @@ data class CpuCoreInfo(
     val scalingMaxFreqMHz: String,
     val minFreqMHz: String,
     val governor: String,
-    val online: Boolean
+    val online: Boolean,
+    val temperature: String
 )
 
 data class CpuClusterInfo(
