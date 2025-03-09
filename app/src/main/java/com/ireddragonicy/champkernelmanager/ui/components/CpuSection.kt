@@ -31,14 +31,12 @@ fun CpuSection(
     val dataRepository = DataRepository.getInstance()
     val coroutineScope = rememberCoroutineScope()
 
-    // Define cluster colors
     val clusterColors = mapOf(
         "Little" to MaterialTheme.colorScheme.primaryContainer,
         "Big" to MaterialTheme.colorScheme.secondaryContainer,
         "Prime" to MaterialTheme.colorScheme.tertiaryContainer
     )
 
-    // Core to cluster map for coloring
     var coreToClusterMap by remember { mutableStateOf<Map<Int, String>>(emptyMap()) }
 
     LaunchedEffect(refreshTrigger) {
@@ -47,10 +45,8 @@ fun CpuSection(
         coreControlInfo = dataRepository.getCoreControlInfo()
         systemLoad = dataRepository.getSystemLoad()
 
-        // Flatten cores from all clusters for grid display
         cores = clusters.flatMap { it.cores }.sortedBy { it.core }
 
-        // Create mapping of core number to cluster name for coloring
         coreToClusterMap = clusters.flatMap { cluster ->
             cluster.cores.map { core -> core.core to cluster.name }
         }.toMap()
@@ -61,7 +57,6 @@ fun CpuSection(
             .fillMaxWidth()
             .padding(16.dp)
     ) {
-        // Title
         Text(
             text = "CPU",
             style = MaterialTheme.typography.titleLarge,
@@ -69,7 +64,6 @@ fun CpuSection(
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
-        // Core frequency grid with modern styling
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -81,36 +75,16 @@ fun CpuSection(
                 modifier = Modifier.padding(16.dp)
             ) {
                 Text(
-                    text = "Core Frequencies & Temperatures",
+                    text = "Core Frequencies",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
 
-                // Cluster legend
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    clusters.forEach { cluster ->
-                        val color = clusterColors[cluster.name]
-                            ?: MaterialTheme.colorScheme.primaryContainer
-                        ClusterLegendItem(
-                            clusterName = cluster.name,
-                            color = color,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-
-                // Use a non-lazy grid approach with rows of cores
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Calculate how many rows we need with 4 cores per row
                     val rowCount = (cores.size + 3) / 4
 
                     for (rowIndex in 0 until rowCount) {
@@ -118,7 +92,6 @@ fun CpuSection(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            // For each row, take up to 4 cores
                             val startIdx = rowIndex * 4
                             val endIdx = minOf(startIdx + 4, cores.size)
 
@@ -130,11 +103,23 @@ fun CpuSection(
                                 CoreFrequencyItem(
                                     core = cores[i],
                                     backgroundColor = color,
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.weight(1f),
+                                    onToggle = { coreNumber, newState ->
+                                        coroutineScope.launch {
+                                            if (dataRepository.setCoreState(coreNumber, newState)) {
+                                                cores = cores.map {
+                                                    if (it.core == coreNumber)
+                                                        it.copy(online = newState)
+                                                    else it
+                                                }
+                                                clusters = dataRepository.getCpuClusters()
+                                                cores = clusters.flatMap { it.cores }.sortedBy { it.core }
+                                            }
+                                        }
+                                    }
                                 )
                             }
 
-                            // Add placeholders if the row isn't complete
                             repeat(4 - (endIdx - startIdx)) {
                                 Spacer(modifier = Modifier.weight(1f))
                             }
@@ -146,7 +131,6 @@ fun CpuSection(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // System info card with modern styling
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -169,7 +153,6 @@ fun CpuSection(
 
                 CpuInfoRow(title = "System Load:", value = systemLoad)
 
-                // Divider for visual separation
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 4.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
@@ -181,7 +164,6 @@ fun CpuSection(
                     fontWeight = FontWeight.Medium
                 )
 
-                // Cluster frequency info with color coding
                 clusters.forEachIndexed { index, cluster ->
                     val clusterColor = clusterColors[cluster.name]
                         ?: MaterialTheme.colorScheme.primaryContainer
@@ -197,13 +179,11 @@ fun CpuSection(
                     )
                 }
 
-                // Divider before governor section
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 4.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
                 )
 
-                // Governor selector
                 Text(
                     text = "CPU Governor",
                     style = MaterialTheme.typography.titleSmall,
@@ -223,7 +203,6 @@ fun CpuSection(
             }
         }
 
-        // Add core control section if supported
         coreControlInfo?.let { info ->
             if (info.cores.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(16.dp))
@@ -233,28 +212,133 @@ fun CpuSection(
     }
 }
 
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ClusterLegendItem(
-    clusterName: String,
-    color: Color,
-    modifier: Modifier = Modifier
+fun CoreFrequencyItem(
+    core: CpuCoreInfo,
+    backgroundColor: Color,
+    modifier: Modifier = Modifier,
+    onToggle: (Int, Boolean) -> Unit
 ) {
-    Surface(
-        modifier = modifier,
-        color = color,
-        shape = MaterialTheme.shapes.small,
-        shadowElevation = 0.dp
-    ) {
-        Text(
-            text = clusterName,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Medium,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp)
+    val freqText = core.curFreqMHz
+    val freqValueAndUnit = if (freqText.contains("MHz", ignoreCase = true)) {
+        val parts = freqText.replace("MHz", "").trim() to "MHz"
+        parts
+    } else {
+        freqText to ""
+    }
+
+    var isPressed by remember { mutableStateOf(false) }
+    val isEnabled = core.core != 0
+
+    val cardColor = when {
+        isPressed -> backgroundColor.copy(alpha = 0.8f)
+        core.online -> backgroundColor
+        else -> MaterialTheme.colorScheme.errorContainer
+    }
+
+    ElevatedCard(
+        onClick = {
+            if (isEnabled) {
+                isPressed = true
+                onToggle(core.core, !core.online)
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    isPressed = false
+                }, 200)
+            }
+        },
+        enabled = isEnabled,
+        modifier = modifier.aspectRatio(0.9f),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = cardColor,
+            disabledContainerColor = if (core.online) backgroundColor else MaterialTheme.colorScheme.errorContainer
+        ),
+        elevation = CardDefaults.elevatedCardElevation(
+            defaultElevation = if (core.online) 4.dp else 1.dp
         )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "CPU ${core.core}",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Clip
+            )
+
+            if (core.online) {
+                Text(
+                    text = freqValueAndUnit.first,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Visible
+                )
+
+                Text(
+                    text = freqValueAndUnit.second,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Normal,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
+                )
+
+                Spacer(modifier = Modifier.height(2.dp))
+                HorizontalDivider(
+                    modifier = Modifier.width(24.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                    thickness = 1.dp
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+
+                Text(
+                    text = core.temperature,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = if (core.temperature.replace("°C", "").trim().toFloatOrNull()?.let { it > 80 } == true)
+                        MaterialTheme.colorScheme.error
+                    else
+                        MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
+                )
+            } else {
+                Text(
+                    text = "Offline",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center
+                )
+
+                if (isEnabled) {
+                    Text(
+                        text = "Tap to enable",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
+                    )
+                }
+            }
+
+            if (core.core == 0) {
+                Text(
+                    text = "(System Core)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
+                )
+            }
+        }
     }
 }
 
@@ -293,100 +377,6 @@ fun ClusterInfoCard(
                     text = scalingMaxFreq,
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun CoreFrequencyItem(core: CpuCoreInfo, backgroundColor: Color, modifier: Modifier = Modifier) {
-    // Parse the frequency value - extract just the number part and the unit
-    val freqText = core.curFreqMHz
-    val freqValueAndUnit = if (freqText.contains("MHz", ignoreCase = true)) {
-        // Split at "MHz" to get frequency value
-        val parts = freqText.replace("MHz", "").trim() to "MHz"
-        parts
-    } else {
-        // If no "MHz", just use as is
-        freqText to ""
-    }
-
-    ElevatedCard(
-        modifier = modifier.aspectRatio(0.9f), // Slightly taller to fit temperature
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = if (core.online)
-                backgroundColor
-            else
-                MaterialTheme.colorScheme.errorContainer
-        ),
-        elevation = CardDefaults.elevatedCardElevation(
-            defaultElevation = if (core.online) 4.dp else 1.dp
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = "CPU ${core.core}",
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Clip
-            )
-
-            if (core.online) {
-                // Display frequency value on its own line if it's long
-                Text(
-                    text = freqValueAndUnit.first,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Visible
-                )
-
-                // Unit on another line
-                Text(
-                    text = freqValueAndUnit.second,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Normal,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1
-                )
-
-                // Add a small divider
-                Spacer(modifier = Modifier.height(2.dp))
-                HorizontalDivider(
-                    modifier = Modifier.width(24.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-                    thickness = 1.dp
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-
-                // Display temperature
-                Text(
-                    text = core.temperature,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
-                    color = if (core.temperature.replace("°C", "").trim().toFloatOrNull()?.let { it > 80 } == true)
-                        MaterialTheme.colorScheme.error
-                    else
-                        MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1
-                )
-            } else {
-                Text(
-                    text = "Offline",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    textAlign = TextAlign.Center
                 )
             }
         }

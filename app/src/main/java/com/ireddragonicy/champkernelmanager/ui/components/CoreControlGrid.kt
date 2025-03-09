@@ -1,6 +1,8 @@
 package com.ireddragonicy.champkernelmanager.ui.components
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +17,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -87,21 +92,49 @@ fun CoreCard(
     modifier: Modifier = Modifier,
     onToggle: () -> Unit
 ) {
-    val alpha by animateFloatAsState(targetValue = if (online) 1f else 0.6f, label = "Alpha")
+    var isPressed by remember { mutableStateOf(false) }
+
+    val alpha by animateFloatAsState(
+        targetValue = if (online) 1f else 0.6f,
+        label = "Alpha"
+    )
+
+    val backgroundColor by animateColorAsState(
+        targetValue = when {
+            isPressed -> MaterialTheme.colorScheme.primaryContainer
+            online -> MaterialTheme.colorScheme.surfaceVariant
+            else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+        },
+        animationSpec = tween(durationMillis = 200),
+        label = "BackgroundColor"
+    )
+
     val statusColor = if (online)
         MaterialTheme.colorScheme.primary
     else
         MaterialTheme.colorScheme.error
 
+    val isEnabled = core != 0
+
     ElevatedCard(
-        onClick = { if (core != 0) onToggle() },
-        enabled = core != 0,
+        onClick = {
+            if (isEnabled) {
+                isPressed = true
+                onToggle()
+                // Reset pressed state after a short delay
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    isPressed = false
+                }, 200)
+            }
+        },
+        enabled = isEnabled,
         modifier = modifier,
         elevation = CardDefaults.elevatedCardElevation(
             defaultElevation = if (online) 4.dp else 1.dp
         ),
         colors = CardDefaults.elevatedCardColors(
-            containerColor = if (online)
+            containerColor = backgroundColor,
+            disabledContainerColor = if (online)
                 MaterialTheme.colorScheme.surfaceVariant
             else
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
