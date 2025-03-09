@@ -19,7 +19,6 @@ fun MainScreen(hasRootAccess: Boolean = true) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route?.substringBefore("/")
 
-    // If no root access, show root check screen directly
     if (!hasRootAccess) {
         RootCheckScreen()
         return
@@ -27,7 +26,6 @@ fun MainScreen(hasRootAccess: Boolean = true) {
 
     Scaffold(
         bottomBar = {
-            // Only show bottom navigation on main screens
             val showBottomNav = currentRoute in listOf(
                 Screen.Home.route,
                 Screen.LiveMonitor.route,
@@ -85,18 +83,5 @@ private fun AppNavHost(
             RootCheckScreen()
         }
 
-        // Example for future detailed screens with parameters
-        /*
-        composable(
-            route = Screen.CpuClusterDetail.route,
-            arguments = Screen.CpuClusterDetail.arguments
-        ) { backStackEntry ->
-            val clusterId = backStackEntry.arguments?.getInt("clusterId") ?: 0
-            CpuClusterDetailScreen(
-                clusterId = clusterId,
-                onBackPressed = { navController.popBackStack() }
-            )
-        }
-        */
     }
 }

@@ -25,7 +25,7 @@ fun CpuSection(
     var clusters by remember { mutableStateOf<List<CpuClusterInfo>>(emptyList()) }
     var availableGovernors by remember { mutableStateOf<List<String>>(emptyList()) }
     var coreControlInfo by remember { mutableStateOf<CoreControlInfo?>(null) }
-    var systemLoad by remember { mutableStateOf("N/A") }
+    var systemLoads by remember { mutableStateOf<List<String>>(emptyList()) }
     var cores by remember { mutableStateOf<List<CpuCoreInfo>>(emptyList()) }
 
     val dataRepository = DataRepository.getInstance()
@@ -43,10 +43,11 @@ fun CpuSection(
         clusters = dataRepository.getCpuClusters()
         availableGovernors = dataRepository.getAvailableGovernors()
         coreControlInfo = dataRepository.getCoreControlInfo()
-        systemLoad = dataRepository.getSystemLoad()
+
+        val rawLoad = dataRepository.getSystemLoad()
+        systemLoads = rawLoad.split(" ").filter { it.isNotBlank() }
 
         cores = clusters.flatMap { it.cores }.sortedBy { it.core }
-
         coreToClusterMap = clusters.flatMap { cluster ->
             cluster.cores.map { core -> core.core to cluster.name }
         }.toMap()
@@ -74,19 +75,12 @@ fun CpuSection(
             Column(
                 modifier = Modifier.padding(16.dp)
             ) {
-                Text(
-                    text = "Core Frequencies",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
-
+                // Core Frequency Grid
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     val rowCount = (cores.size + 3) / 4
-
                     for (rowIndex in 0 until rowCount) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -94,7 +88,6 @@ fun CpuSection(
                         ) {
                             val startIdx = rowIndex * 4
                             val endIdx = minOf(startIdx + 4, cores.size)
-
                             for (i in startIdx until endIdx) {
                                 val clusterName = coreToClusterMap[cores[i].core] ?: "Unknown"
                                 val color = clusterColors[clusterName]
@@ -119,45 +112,28 @@ fun CpuSection(
                                     }
                                 )
                             }
-
                             repeat(4 - (endIdx - startIdx)) {
                                 Spacer(modifier = Modifier.weight(1f))
                             }
                         }
                     }
                 }
-            }
-        }
 
-        Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            ),
-            shape = MaterialTheme.shapes.large
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+                // System Information
                 Text(
                     text = "System Information",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 4.dp)
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
                 )
-
-                CpuInfoRow(title = "System Load:", value = systemLoad)
 
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 4.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
                 )
 
+                // Cluster Frequencies
                 Text(
                     text = "Cluster Frequencies",
                     style = MaterialTheme.typography.titleSmall,
@@ -171,11 +147,15 @@ fun CpuSection(
                     val hwMaxFreq = cluster.cores.firstOrNull()?.hwMaxFreqMHz ?: "N/A"
                     val scalingMaxFreq = cluster.cores.firstOrNull()?.scalingMaxFreqMHz ?: "N/A"
 
+                    // Pair cluster with system load if available
+                    val clusterLoad = systemLoads.getOrNull(index) ?: "N/A"
+
                     ClusterInfoCard(
                         clusterName = cluster.name,
                         hwMaxFreq = hwMaxFreq,
                         scalingMaxFreq = scalingMaxFreq,
-                        color = clusterColor
+                        color = clusterColor,
+                        clusterLoad = clusterLoad
                     )
                 }
 
@@ -184,6 +164,7 @@ fun CpuSection(
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
                 )
 
+                // CPU Governor
                 Text(
                     text = "CPU Governor",
                     style = MaterialTheme.typography.titleSmall,
@@ -203,10 +184,11 @@ fun CpuSection(
             }
         }
 
+        // Core Control Section (shown if info.cores is not empty)
         coreControlInfo?.let { info ->
             if (info.cores.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(16.dp))
-                CoreControlCard(onNavigate = onNavigateToCoreControl)
+                CoreControlCard(onNavigateToCoreControl)
             }
         }
     }
@@ -303,10 +285,14 @@ fun CoreFrequencyItem(
                     text = core.temperature,
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium,
-                    color = if (core.temperature.replace("°C", "").trim().toFloatOrNull()?.let { it > 80 } == true)
+                    color = if (core.temperature.replace("°C", "").trim()
+                            .toFloatOrNull()
+                            ?.let { it > 80 } == true
+                    ) {
                         MaterialTheme.colorScheme.error
-                    else
-                        MaterialTheme.colorScheme.onSurface,
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
                     textAlign = TextAlign.Center,
                     maxLines = 1
                 )
@@ -317,7 +303,6 @@ fun CoreFrequencyItem(
                     fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.Center
                 )
-
                 if (isEnabled) {
                     Text(
                         text = "Tap to enable",
@@ -347,7 +332,8 @@ fun ClusterInfoCard(
     clusterName: String,
     hwMaxFreq: String,
     scalingMaxFreq: String,
-    color: Color
+    color: Color,
+    clusterLoad: String
 ) {
     Surface(
         shape = MaterialTheme.shapes.small,
@@ -359,11 +345,23 @@ fun ClusterInfoCard(
         Column(
             modifier = Modifier.padding(8.dp)
         ) {
-            Text(
-                text = clusterName,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = clusterName,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "${clusterLoad}%",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium
+                )
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -380,25 +378,6 @@ fun ClusterInfoCard(
                 )
             }
         }
-    }
-}
-
-@Composable
-fun CpuInfoRow(title: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyMedium
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Bold
-        )
     }
 }
 
@@ -426,7 +405,6 @@ fun CoreControlCard(onNavigate: () -> Unit) {
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Medium
             )
-
             FilledTonalButton(
                 onClick = onNavigate,
                 shape = MaterialTheme.shapes.medium
@@ -462,7 +440,6 @@ fun GovernorSelector(
             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
             shape = MaterialTheme.shapes.medium
         )
-
         ExposedDropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false }
