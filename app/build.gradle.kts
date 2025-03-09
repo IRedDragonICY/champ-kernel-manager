@@ -14,55 +14,80 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+
     kotlinOptions {
         jvmTarget = "11"
+        freeCompilerArgs = listOf("-Xopt-in=kotlin.RequiresOptIn", "-Xjvm-default=all")
     }
+
     buildFeatures {
         compose = true
         buildConfig = true
     }
+
+    packaging {
+        resources {
+            excludes += listOf(
+                "META-INF/LICENSE.txt",
+                "META-INF/LICENSE",
+                "META-INF/NOTICE.txt",
+                "META-INF/NOTICE",
+                "META-INF/AL2.0",
+                "META-INF/LGPL2.1"
+            )
+        }
+    }
 }
 
+val composeBom = "2025.02.00"
+val navVersion = "2.8.8"
+val libsuVersion = "6.0.0"
+
 dependencies {
+    implementation(platform("androidx.compose:compose-bom:$composeBom"))
+
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.activity:activity-compose:1.10.1")
-    implementation(platform("androidx.compose:compose-bom:2025.02.00"))
+
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
-    implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
 
-    // Add splash screen dependency
+    debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+
     implementation("androidx.core:core-splashscreen:1.0.1")
 
     implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.compose.material:material-icons-extended")
 
-    implementation("androidx.navigation:navigation-compose:2.8.8")
+    implementation("androidx.navigation:navigation-compose:$navVersion")
+
     implementation("androidx.compose.animation:animation:1.7.8")
-    implementation("com.github.topjohnwu.libsu:core:6.0.0")
-    implementation("com.github.topjohnwu.libsu:io:6.0.0")
+
+    implementation("com.github.topjohnwu.libsu:core:$libsuVersion")
+    implementation("com.github.topjohnwu.libsu:io:$libsuVersion")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
-    androidTestImplementation(platform("androidx.compose:compose-bom:2025.02.00"))
+    androidTestImplementation(platform("androidx.compose:compose-bom:$composeBom"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
-    debugImplementation("androidx.compose.ui:ui-tooling")
-    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
