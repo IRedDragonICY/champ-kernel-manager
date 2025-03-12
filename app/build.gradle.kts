@@ -25,9 +25,30 @@ android {
         }
     }
 
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+        }
+    }
+
+    bundle {
+        language {
+            enableSplit = true
+        }
+        density {
+            enableSplit = true
+        }
+        abi {
+            enableSplit = true
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -48,8 +69,21 @@ android {
                 "META-INF/NOTICE.txt",
                 "META-INF/NOTICE",
                 "META-INF/AL2.0",
-                "META-INF/LGPL2.1"
+                "META-INF/LGPL2.1",
+                "META-INF/DEPENDENCIES",
+                "META-INF/*.kotlin_module",
+                "META-INF/versions/**",
+                "**.properties",
+                "kotlin/**",
+                "okhttp3/**"
             )
+            pickFirsts += listOf(
+                "META-INF/androidx.compose.animation_animation.version",
+                "META-INF/androidx.compose.material_material.version"
+            )
+        }
+        jniLibs {
+            useLegacyPackaging = false
         }
     }
 }
@@ -84,6 +118,8 @@ dependencies {
 
     implementation("com.github.topjohnwu.libsu:core:$libsuVersion")
     implementation("com.github.topjohnwu.libsu:io:$libsuVersion")
+
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
