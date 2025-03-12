@@ -21,6 +21,35 @@ jobs:
       - name: Set repository name as env variable
         run: echo "repository_name=$(echo '${{ github.repository }}' | awk -F '/' '{print $2}')" >> $GITHUB_ENV
 
+      # Cache Gradle Wrapper separately
+      - name: Cache Gradle Wrapper
+        uses: actions/cache@v3
+        with:
+          path: ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-wrapper-${{ hashFiles('**/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-wrapper-
+
+      # Cache Gradle Dependencies
+      - name: Cache Gradle Dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-caches-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-caches-
+
+      # Cache Android build folder
+      - name: Cache Android Build
+        uses: actions/cache@v3
+        with:
+          path: |
+            ${{ env.main_project_module }}/build
+            ~/.android/build-cache
+          key: ${{ runner.os }}-build-${{ env.main_project_module }}-${{ hashFiles('**/*.gradle*') }}-${{ hashFiles('**/*.kt', '**/*.java', '**/*.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.main_project_module }}-
+
       - name: Set Up JDK
         uses: actions/setup-java@v4
         with:
@@ -32,13 +61,13 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Run gradle tests
-        run: ./gradlew test
+        run: ./gradlew test --build-cache --parallel --no-daemon
 
       - name: Build gradle project
-        run: ./gradlew build
+        run: ./gradlew build --build-cache --parallel --no-daemon
 
       - name: Build apk debug project (APK)
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --build-cache --parallel --no-daemon
 
       - name: Decode keystore
         run: |
@@ -48,6 +77,7 @@ jobs:
       - name: Build signed APK Release
         run: |
           ./gradlew ${{ env.main_project_module }}:assembleRelease \
+            --build-cache --parallel --no-daemon \
             -Pandroid.injected.signing.store.file=$HOME/keystore/release-key.jks \
             -Pandroid.injected.signing.store.password=${{ secrets.STORE_PASSWORD }} \
             -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
@@ -56,6 +86,7 @@ jobs:
       - name: Build signed AAB
         run: |
           ./gradlew ${{ env.main_project_module }}:bundleRelease \
+            --build-cache --parallel --no-daemon \
             -Pandroid.injected.signing.store.file=$HOME/keystore/release-key.jks \
             -Pandroid.injected.signing.store.password=${{ secrets.STORE_PASSWORD }} \
             -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
