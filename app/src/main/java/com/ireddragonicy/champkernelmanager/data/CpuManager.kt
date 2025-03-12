@@ -3,7 +3,7 @@ package com.ireddragonicy.champkernelmanager.data
 import com.ireddragonicy.champkernelmanager.utils.FileUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.util.Locale
+import java.util.*
 
 class CpuManager {
     companion object {
