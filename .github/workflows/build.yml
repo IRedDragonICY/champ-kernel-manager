@@ -40,13 +40,18 @@ jobs:
       - name: Build apk debug project (APK)
         run: ./gradlew assembleDebug
 
-      - name: Build apk release project (APK)
-        run: ./gradlew assemble
-
       - name: Decode keystore
         run: |
           mkdir -p $HOME/keystore/
           echo "${{ secrets.SIGNING_KEYSTORE_B64 }}" | base64 --decode > $HOME/keystore/release-key.jks
+
+      - name: Build signed APK Release
+        run: |
+          ./gradlew ${{ env.main_project_module }}:assembleRelease \
+            -Pandroid.injected.signing.store.file=$HOME/keystore/release-key.jks \
+            -Pandroid.injected.signing.store.password=${{ secrets.STORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
 
       - name: Build signed AAB
         run: |
