@@ -1,0 +1,86 @@
+name: Generated APK AAB \(Upload \- Create Artifact To Github Action\)
+
+env:
+  main_project_module: app
+  playstore_name: Champ Kernel Manager
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set current date as env variable
+        run: echo "date_today=\$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+
+      - name: Set repository name as env variable
+        run: echo "repository_name=\$(echo '\${{ github.repository }}' | awk -F '/' '{print \$2}')" >> $GITHUB_ENV
+
+      - name: Set Up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Change wrapper permissions
+        run: chmod +x ./gradlew
+
+      - name: Run gradle tests
+        run: ./gradlew test
+
+      - name: Build gradle project
+        run: ./gradlew build
+
+      - name: Build apk debug project \(APK\)
+        run: ./gradlew assembleDebug
+
+      - name: Build apk release project \(APK\)
+        run: ./gradlew assemble
+
+      - name: Decode keystore
+        run: echo "\${{ secrets.SIGNING_KEYSTORE_B64 }}" | base64 --decode > `release-key.jks`
+
+      - name: Build signed AAB
+        run: |
+          ./gradlew \${{ env.main_project_module }}:bundleRelease \
+            -Pandroid.injected.signing.store.file=release-key.jks \
+            -Pandroid.injected.signing.store.password=\${{ secrets.STORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=\${{ secrets.KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password=\${{ secrets.KEY_PASSWORD }}
+
+      - name: Create Pre-release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: \${{ env.date_today }} \- \${{ env.playstore_name }}
+          tag_name: v\${{ env.date_today }}
+          prerelease: true
+          files: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/bundle/release/*.aab
+        env:
+          GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload APK Debug \- Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: \${{ env.date_today }} \- \${{ env.playstore_name }} \- \${{ env.repository_name }} \- APK\(s\) debug generated
+          path: app/build/outputs/apk/debug/
+
+      - name: Upload APK Release \- Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: \${{ env.date_today }} \- \${{ env.playstore_name }} \- \${{ env.repository_name }} \- APK\(s\) release generated
+          path: app/build/outputs/apk/release/
+
+      - name: Upload AAB \(App Bundle\) Release \- Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: \${{ env.date_today }} \- \${{ env.playstore_name }} \- \${{ env.repository_name }} \- App bundle\(s\) AAB release generated
+          path: app/build/outputs/bundle/release/
