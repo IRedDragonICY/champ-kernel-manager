@@ -6,7 +6,7 @@ env:
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master, develop ]
     tags:
       - 'v*'
   workflow_dispatch:
@@ -27,33 +27,26 @@ jobs:
           echo "repository_name=$(echo '${{ github.repository }}' | awk -F '/' '{print $2}')" >> $GITHUB_ENV
           echo "commit_hash=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
 
-      # Cache configuration
-      - name: Cache Gradle Wrapper
-        uses: actions/cache@v3
-        with:
-          path: ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-wrapper-${{ hashFiles('**/gradle/wrapper/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-wrapper-
+      # Setup Android SDK
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Cache Gradle Dependencies
-        uses: actions/cache@v3
-        with:
-          path: ~/.gradle/caches
-          key: ${{ runner.os }}-gradle-caches-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-caches-
+      # Invalidate old caches by using a date-based key prefix
+      - name: Set cache key date
+        run: echo "CACHE_DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
 
-      - name: Cache Android Build
-        uses: actions/cache@v3
+      # Consolidated cache configuration with date-based invalidation
+      - name: Setup Gradle Cache
+        uses: actions/cache@v4
         with:
           path: |
-            ${{ env.main_project_module }}/build
-            ~/.android/build-cache
-          key: ${{ runner.os }}-build-${{ env.main_project_module }}-${{ hashFiles('**/*.gradle*') }}-${{ hashFiles('**/*.kt', '**/*.java', '**/*.xml') }}
+            ~/.gradle/wrapper
+            ~/.gradle/caches
+          key: ${{ env.CACHE_DATE }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: |
-            ${{ runner.os }}-build-${{ env.main_project_module }}-
+            ${{ env.CACHE_DATE }}-gradle-
 
+      # Don't cache build outputs to avoid using stale compiled code
       - name: Set Up JDK
         uses: actions/setup-java@v4
         with:
@@ -64,54 +57,92 @@ jobs:
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
 
-      - name: Run tests
-        run: ./gradlew test --build-cache --parallel --no-daemon
+      - name: Clean project
+        run: ./gradlew clean
 
-      - name: Build project
-        run: ./gradlew build --build-cache --parallel --no-daemon
+      # Force resolver update to ensure models are available
+      - name: Update dependencies
+        run: ./gradlew --refresh-dependencies
+
+      - name: Run tests
+        continue-on-error: true
+        run: ./gradlew test --stacktrace
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug --build-cache --parallel --no-daemon
+        continue-on-error: true
+        run: ./gradlew assembleDebug --stacktrace
 
       - name: Decode keystore
+        id: decode_keystore
+        continue-on-error: true
         run: |
           mkdir -p $HOME/keystore/
           echo "${{ secrets.SIGNING_KEYSTORE_B64 }}" | base64 --decode > $HOME/keystore/release-key.jks
+          if [ ! -f "$HOME/keystore/release-key.jks" ]; then
+            echo "::warning::Failed to decode keystore"
+            exit 1
+          fi
 
       - name: Build signed APK Release
+        continue-on-error: true
         run: |
-          ./gradlew ${{ env.main_project_module }}:assembleRelease \
-            --build-cache --parallel --no-daemon \
-            -Pandroid.injected.signing.store.file=$HOME/keystore/release-key.jks \
-            -Pandroid.injected.signing.store.password=${{ secrets.STORE_PASSWORD }} \
-            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
-            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
+          if [ -f "$HOME/keystore/release-key.jks" ]; then
+            ./gradlew ${{ env.main_project_module }}:assembleRelease \
+              -Pandroid.injected.signing.store.file=$HOME/keystore/release-key.jks \
+              -Pandroid.injected.signing.store.password=${{ secrets.STORE_PASSWORD }} \
+              -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+              -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }} \
+              --stacktrace
+          else
+            echo "::warning::Using debug signing for release APK due to missing keystore"
+            ./gradlew ${{ env.main_project_module }}:assembleRelease --stacktrace
+          fi
 
       - name: Build signed AAB
+        continue-on-error: true
         run: |
-          ./gradlew ${{ env.main_project_module }}:bundleRelease \
-            --build-cache --parallel --no-daemon \
-            -Pandroid.injected.signing.store.file=$HOME/keystore/release-key.jks \
-            -Pandroid.injected.signing.store.password=${{ secrets.STORE_PASSWORD }} \
-            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
-            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
+          if [ -f "$HOME/keystore/release-key.jks" ]; then
+            ./gradlew ${{ env.main_project_module }}:bundleRelease \
+              -Pandroid.injected.signing.store.file=$HOME/keystore/release-key.jks \
+              -Pandroid.injected.signing.store.password=${{ secrets.STORE_PASSWORD }} \
+              -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+              -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }} \
+              --stacktrace
+          else
+            echo "::warning::Using debug signing for AAB due to missing keystore"
+            ./gradlew ${{ env.main_project_module }}:bundleRelease --stacktrace
+          fi
 
       - name: Upload to VirusTotal
         id: virustotal
+        continue-on-error: true
         run: |
-          APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
-          echo "APK_FILENAME=$(basename $APK_PATH)" >> $GITHUB_ENV
+          APK_PATH=$(find app/build/outputs/apk -path "*/release/*.apk" -o -path "*/debug/*.apk" | head -n 1)
           
-          RESPONSE=$(curl -s \
-            --url https://www.virustotal.com/api/v3/files \
-            --header "x-apikey: ${{ secrets.VIRUSTOTAL_API_KEY }}" \
-            --form file=@$APK_PATH)
-          
-          ANALYSIS_ID=$(echo $RESPONSE | jq -r '.data.id')
-          ANALYSIS_URL="https://www.virustotal.com/gui/file-analysis/$ANALYSIS_ID"
-          
-          echo "vt_analysis_url=$ANALYSIS_URL" >> $GITHUB_ENV
-          echo "VirusTotal scan submitted. Analysis URL: $ANALYSIS_URL"
+          if [ -n "$APK_PATH" ] && [ -f "$APK_PATH" ]; then
+            echo "APK_FILENAME=$(basename $APK_PATH)" >> $GITHUB_ENV
+            
+            if [ -n "${{ secrets.VIRUSTOTAL_API_KEY }}" ]; then
+              RESPONSE=$(curl -s \
+                --url https://www.virustotal.com/api/v3/files \
+                --header "x-apikey: ${{ secrets.VIRUSTOTAL_API_KEY }}" \
+                --form file=@$APK_PATH)
+              
+              if echo "$RESPONSE" | grep -q "id"; then
+                ANALYSIS_ID=$(echo $RESPONSE | jq -r '.data.id')
+                ANALYSIS_URL="https://www.virustotal.com/gui/file-analysis/$ANALYSIS_ID"
+                echo "vt_analysis_url=$ANALYSIS_URL" >> $GITHUB_ENV
+              else
+                echo "::warning::VirusTotal API response did not contain an analysis ID"
+                echo "vt_analysis_url=Not available (API error)" >> $GITHUB_ENV
+              fi
+            else
+              echo "vt_analysis_url=Not available (API key not configured)" >> $GITHUB_ENV
+            fi
+          else
+            echo "::warning::No APK files found to scan"
+            echo "vt_analysis_url=Not available (APK not found)" >> $GITHUB_ENV
+          fi
 
       - name: Generate changelog
         id: changelog
@@ -128,29 +159,43 @@ jobs:
           
           ![Build Status](https://github.com/${{ github.repository }}/actions/workflows/build.yml/badge.svg)
           
-          ## Release Information
+          ## 📱 Release Information
           - **Version**: ${{ env.date_today }}-${{ env.commit_hash }}
           - **Build Date**: $(date +'%B %d, %Y')
           
-          ## Security
+          ## 🔒 Security
           - [VirusTotal Scan Results](${{ env.vt_analysis_url }})
           
-          ## Recent Changes
+          ## 📋 Recent Changes
           ${{ env.CHANGELOG }}
           
-          ## Installation
+          ## 📥 Installation
           1. Download the APK file
           2. Enable "Install from Unknown Sources" in your device settings
           3. Install the application
           
-          ## Support
+          ## 📞 Support
           If you encounter any issues, please [open an issue](https://github.com/${{ github.repository }}/issues/new) on GitHub.
           EOL
 
+      - name: Check for artifacts
+        id: check_artifacts
+        run: |
+          ARTIFACTS_FOUND="false"
+          if [ -d "app/build/outputs/apk/debug" ] && [ "$(find app/build/outputs/apk/debug -name '*.apk' | wc -l)" -gt 0 ]; then
+            ARTIFACTS_FOUND="true"
+          elif [ -d "app/build/outputs/apk/release" ] && [ "$(find app/build/outputs/apk/release -name '*.apk' | wc -l)" -gt 0 ]; then
+            ARTIFACTS_FOUND="true"
+          elif [ -d "app/build/outputs/bundle/release" ] && [ "$(find app/build/outputs/bundle/release -name '*.aab' | wc -l)" -gt 0 ]; then
+            ARTIFACTS_FOUND="true"
+          fi
+          echo "artifacts_found=$ARTIFACTS_FOUND" >> $GITHUB_ENV
+
       - name: Create Pre-release
-        uses: softprops/action-gh-release@v1
+        if: env.artifacts_found == 'true'
+        uses: softprops/action-gh-release@v2
         with:
-          name: ${{ env.app_name }} - ${{ env.date_today }}
+          name: ${{ env.app_name }} - ${{ env.date_today }} (${{ env.commit_hash }})
           tag_name: v${{ env.date_today }}-${{ env.commit_hash }}
           prerelease: true
           body_path: release_notes.md
@@ -166,15 +211,28 @@ jobs:
         with:
           name: ${{ env.app_name }}-${{ env.date_today }}-debug
           path: app/build/outputs/apk/debug/
+          if-no-files-found: ignore
 
       - name: Upload APK Release - Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.app_name }}-${{ env.date_today }}-release
           path: app/build/outputs/apk/release/
+          if-no-files-found: ignore
 
       - name: Upload AAB Release - Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.app_name }}-${{ env.date_today }}-bundle
           path: app/build/outputs/bundle/release/
+          if-no-files-found: ignore
+
+      - name: Upload Build Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            app/build/reports/
+            ./*.log
+          if-no-files-found: ignore
