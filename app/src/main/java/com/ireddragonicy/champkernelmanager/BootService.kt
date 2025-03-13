@@ -12,7 +12,7 @@ import kotlinx.coroutines.launch
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
-            val settings = AppSettings(context)
+            val settings = AppSettings.getInstance(context)
             if (settings.applyOnBoot) {
                 BootService.applySettings(context)
             }
@@ -22,38 +22,34 @@ class BootReceiver : BroadcastReceiver() {
 
 object BootService {
     fun applySettings(context: Context) {
-        val settings = AppSettings(context)
-        val dataRepository = DataRepository.getInstance()
-        
-        CoroutineScope(Dispatchers.IO).launch {
-            // Apply CPU governor
-            if (settings.savedCpuGovernor.isNotEmpty()) {
-                dataRepository.setAllCoresGovernor(settings.savedCpuGovernor)
-            }
-            
-            // Apply GPU settings
-            if (settings.savedGpuGovernor.isNotEmpty()) {
-                dataRepository.setGpuGovernor(settings.savedGpuGovernor)
-            }
-            
-            if (settings.savedGpuMaxFreq.isNotEmpty()) {
-                dataRepository.setGpuMaxFreq(settings.savedGpuMaxFreq)
-            }
-            
-            if (settings.savedGpuMinFreq.isNotEmpty()) {
-                dataRepository.setGpuMinFreq(settings.savedGpuMinFreq)
-            }
-            
+        val settings = AppSettings.getInstance(context)
+        val repo = DataRepository.getInstance()
 
-            
-            // Apply IO scheduler
-            if (settings.savedIoScheduler.isNotEmpty()) {
-                dataRepository.setIoScheduler(settings.savedIoScheduler)
-            }
-            
-            // Apply TCP congestion algorithm
-            if (settings.savedTcpCongestion.isNotEmpty()) {
-                dataRepository.setTcpCongestion(settings.savedTcpCongestion)
+        CoroutineScope(Dispatchers.IO).launch {
+            with(settings) {
+                if (savedCpuGovernor.isNotEmpty()) {
+                    repo.setAllCoresGovernor(savedCpuGovernor)
+                }
+
+                if (savedGpuGovernor.isNotEmpty()) {
+                    repo.setGpuGovernor(savedGpuGovernor)
+                }
+
+                if (savedGpuMaxFreq.isNotEmpty()) {
+                    repo.setGpuMaxFreq(savedGpuMaxFreq)
+                }
+
+                if (savedGpuMinFreq.isNotEmpty()) {
+                    repo.setGpuMinFreq(savedGpuMinFreq)
+                }
+
+                if (savedIoScheduler.isNotEmpty()) {
+                    repo.setIoScheduler(savedIoScheduler)
+                }
+
+                if (savedTcpCongestion.isNotEmpty()) {
+                    repo.setTcpCongestion(savedTcpCongestion)
+                }
             }
         }
     }

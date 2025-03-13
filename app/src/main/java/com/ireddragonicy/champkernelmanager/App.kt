@@ -20,7 +20,7 @@ class App : Application() {
             .setTimeout(10)
         )
 
-        settings = AppSettings(this)
+        settings = AppSettings.getInstance(this)
 
         isDarkTheme.value = settings.darkTheme
         useDynamicColors.value = settings.useDynamicColors
