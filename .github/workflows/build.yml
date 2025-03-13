@@ -151,32 +151,41 @@ jobs:
           echo "CHANGELOG<<EOF" >> $GITHUB_ENV
           echo "$CHANGELOG" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
+          # Debug output to verify changelog content
+          echo "Generated changelog:"
+          echo "$CHANGELOG"
 
       - name: Create Release Notes
         run: |
-          cat > release_notes.md << EOL
-          # ${{ env.app_name }} - Build ${{ env.build_number }}
+          BUILD_DATE=$(date +'%B %d, %Y')
+          # Use line-by-line approach for better reliability
+          {
+            echo "# ${{ env.app_name }} - Build ${{ env.build_number }}"
+            echo ""
+            echo "![Build Status](https://github.com/${{ github.repository }}/actions/workflows/build.yml/badge.svg)"
+            echo ""
+            echo "## 📱 Release Information"
+            echo "- **Version**: ${{ env.date_today }}-${{ env.commit_hash }}"
+            echo "- **Build Date**: $BUILD_DATE"
+            echo ""
+            echo "## 🔒 Security"
+            echo "- [VirusTotal Scan Results](${{ env.vt_analysis_url }})"
+            echo ""
+            echo "## 📋 Recent Changes"
+            echo "${{ env.CHANGELOG }}"
+            echo ""
+            echo "## 📥 Installation"
+            echo "1. Download the APK file"
+            echo "2. Enable \"Install from Unknown Sources\" in your device settings"
+            echo "3. Install the application"
+            echo ""
+            echo "## 📞 Support"
+            echo "If you encounter any issues, please [open an issue](https://github.com/${{ github.repository }}/issues/new) on GitHub."
+          } > release_notes.md
           
-          ![Build Status](https://github.com/${{ github.repository }}/actions/workflows/build.yml/badge.svg)
-          
-          ## 📱 Release Information
-          - **Version**: ${{ env.date_today }}-${{ env.commit_hash }}
-          - **Build Date**: $(date +'%B %d, %Y')
-          
-          ## 🔒 Security
-          - [VirusTotal Scan Results](${{ env.vt_analysis_url }})
-          
-          ## 📋 Recent Changes
-          ${{ env.CHANGELOG }}
-          
-          ## 📥 Installation
-          1. Download the APK file
-          2. Enable "Install from Unknown Sources" in your device settings
-          3. Install the application
-          
-          ## 📞 Support
-          If you encounter any issues, please [open an issue](https://github.com/${{ github.repository }}/issues/new) on GitHub.
-          EOL
+          # Debug: Display the generated release notes file
+          echo "Generated release notes:"
+          cat release_notes.md
 
       - name: Check for artifacts
         id: check_artifacts
@@ -190,6 +199,19 @@ jobs:
             ARTIFACTS_FOUND="true"
           fi
           echo "artifacts_found=$ARTIFACTS_FOUND" >> $GITHUB_ENV
+          echo "Artifacts found: $ARTIFACTS_FOUND"
+
+      - name: Debug - Check Release Notes File
+        run: |
+          if [ -f "release_notes.md" ]; then
+            echo "Release notes file exists and contains:"
+            ls -la release_notes.md
+            cat release_notes.md
+          else
+            echo "ERROR: Release notes file does not exist"
+            pwd
+            ls -la
+          fi
 
       - name: Create Pre-release
         if: env.artifacts_found == 'true'
