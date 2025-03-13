@@ -120,24 +120,30 @@ jobs:
           fi
 
       - name: Scan with VirusTotal
-        if: success() && secrets.VIRUSTOTAL_API_KEY != ''
+        if: success()
         id: virustotal
+        env:
+          VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
         run: |
-          APK_PATH=$(find app/build/outputs/apk -path "*/release/*.apk" | head -n 1)
-          if [ -n "$APK_PATH" ] && [ -f "$APK_PATH" ]; then
-            RESPONSE=$(curl -s \
-              --url https://www.virustotal.com/api/v3/files \
-              --header "x-apikey: ${{ secrets.VIRUSTOTAL_API_KEY }}" \
-              --form file=@$APK_PATH)
-            
-            if echo "$RESPONSE" | grep -q "id"; then
-              ANALYSIS_ID=$(echo $RESPONSE | jq -r '.data.id')
-              echo "analysis_url=https://www.virustotal.com/gui/file-analysis/$ANALYSIS_ID" >> $GITHUB_OUTPUT
+          if [ -n "$VIRUSTOTAL_API_KEY" ]; then
+            APK_PATH=$(find app/build/outputs/apk -path "*/release/*.apk" | head -n 1)
+            if [ -n "$APK_PATH" ] && [ -f "$APK_PATH" ]; then
+              RESPONSE=$(curl -s \
+                --url https://www.virustotal.com/api/v3/files \
+                --header "x-apikey: $VIRUSTOTAL_API_KEY" \
+                --form file=@$APK_PATH)
+              
+              if echo "$RESPONSE" | grep -q "id"; then
+                ANALYSIS_ID=$(echo $RESPONSE | jq -r '.data.id')
+                echo "analysis_url=https://www.virustotal.com/gui/file-analysis/$ANALYSIS_ID" >> $GITHUB_OUTPUT
+              else
+                echo "analysis_url=Not available (API error)" >> $GITHUB_OUTPUT
+              fi
             else
-              echo "analysis_url=Not available (API error)" >> $GITHUB_OUTPUT
+              echo "analysis_url=Not available (APK not found)" >> $GITHUB_OUTPUT
             fi
           else
-            echo "analysis_url=Not available (APK not found)" >> $GITHUB_OUTPUT
+            echo "analysis_url=Not available (No API key provided)" >> $GITHUB_OUTPUT
           fi
 
       - name: Generate release notes
