@@ -16,9 +16,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.ref }}
+
+      - name: Verify checkout
+        run: |
+          echo "Current branch: $(git branch --show-current)"
+          echo "Latest commit: $(git log -1 --pretty=format:'%h - %s (%an)')"
+          echo "Repository files:"
+          ls -la
+          echo "App module files:"
+          if [ -d "app" ]; then
+            ls -la app
+          else
+            echo "WARNING: app directory not found!"
+          fi
 
       - name: Set environment variables
         run: |
@@ -54,13 +69,32 @@ jobs:
           java-version: '17'
           cache: 'gradle'
 
+      - name: Verify Gradle files
+        run: |
+          echo "Checking for Gradle files:"
+          if [ -f "./gradlew" ]; then
+            echo "✓ gradlew exists"
+          else
+            echo "✗ gradlew is missing!"
+          fi
+          if [ -d "./gradle" ]; then
+            echo "✓ gradle directory exists"
+            ls -la ./gradle
+          else
+            echo "✗ gradle directory is missing!"
+          fi
+          if [ -f "./build.gradle" ] || [ -f "./build.gradle.kts" ]; then
+            echo "✓ root build.gradle exists"
+          else
+            echo "✗ root build.gradle is missing!"
+          fi
+
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
 
       - name: Clean project
         run: ./gradlew clean
 
-      # Force resolver update to ensure models are available
       - name: Update dependencies
         run: ./gradlew --refresh-dependencies
 
@@ -113,6 +147,16 @@ jobs:
             ./gradlew ${{ env.main_project_module }}:bundleRelease --stacktrace
           fi
 
+      - name: Check build outputs
+        run: |
+          echo "Checking for build outputs:"
+          echo "Debug APK:"
+          find app/build/outputs/apk/debug -type f -name "*.apk" || echo "No debug APK found"
+          echo "Release APK:"
+          find app/build/outputs/apk/release -type f -name "*.apk" || echo "No release APK found"
+          echo "Release Bundle:"
+          find app/build/outputs/bundle/release -type f -name "*.aab" || echo "No release bundle found"
+
       - name: Upload to VirusTotal
         id: virustotal
         continue-on-error: true
@@ -121,6 +165,7 @@ jobs:
           
           if [ -n "$APK_PATH" ] && [ -f "$APK_PATH" ]; then
             echo "APK_FILENAME=$(basename $APK_PATH)" >> $GITHUB_ENV
+            echo "Found APK at: $APK_PATH"
             
             if [ -n "${{ secrets.VIRUSTOTAL_API_KEY }}" ]; then
               RESPONSE=$(curl -s \
@@ -193,10 +238,13 @@ jobs:
           ARTIFACTS_FOUND="false"
           if [ -d "app/build/outputs/apk/debug" ] && [ "$(find app/build/outputs/apk/debug -name '*.apk' | wc -l)" -gt 0 ]; then
             ARTIFACTS_FOUND="true"
+            echo "Debug APK found"
           elif [ -d "app/build/outputs/apk/release" ] && [ "$(find app/build/outputs/apk/release -name '*.apk' | wc -l)" -gt 0 ]; then
             ARTIFACTS_FOUND="true"
+            echo "Release APK found"
           elif [ -d "app/build/outputs/bundle/release" ] && [ "$(find app/build/outputs/bundle/release -name '*.aab' | wc -l)" -gt 0 ]; then
             ARTIFACTS_FOUND="true"
+            echo "Release Bundle found"
           fi
           echo "artifacts_found=$ARTIFACTS_FOUND" >> $GITHUB_ENV
           echo "Artifacts found: $ARTIFACTS_FOUND"
