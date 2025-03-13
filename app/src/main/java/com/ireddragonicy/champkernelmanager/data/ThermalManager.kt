@@ -15,13 +15,7 @@ class ThermalManager {
     private var cpuThermalZonesCache: Map<Int, ThermalZoneInfo>? = null
     private var thermalZoneCacheTime: Long = 0
 
-    data class ThermalZoneInfo(
-        val zoneId: Int,
-        val type: String,
-        val temp: Float,
-        val cpuType: String? = null,
-        val coreNumber: Int? = null
-    )
+
 
     suspend fun getThermalInfo(): ThermalInfo = withContext(Dispatchers.IO) {
         val typesRaw = FileUtils.runCommandAsRoot("su -c \"cat ${THERMAL_BASE_PATH}thermal_zone*/type\"") ?: ""

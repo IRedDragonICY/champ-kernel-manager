@@ -53,6 +53,13 @@ data class ThermalZone(
     val temp: Float
 )
 
+data class ThermalZoneInfo(
+    val zoneId: Int,
+    val type: String,
+    val temp: Float,
+    val cpuType: String? = null,
+    val coreNumber: Int? = null
+)
 data class ThermalInfo(
     val zones: List<ThermalZone>,
     val thermalServicesEnabled: Boolean
