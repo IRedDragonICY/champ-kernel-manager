@@ -1,6 +1,5 @@
 package com.ireddragonicy.champkernelmanager.data
 
-import android.util.Log
 import com.ireddragonicy.champkernelmanager.data.models.TempRecord
 import com.ireddragonicy.champkernelmanager.data.models.ThermalInfo
 import com.ireddragonicy.champkernelmanager.data.models.ThermalZone
@@ -14,66 +13,84 @@ class ThermalManager {
     companion object {
         private const val THERMAL_BASE_PATH = "/sys/class/thermal/"
         private const val THERMAL_CACHE_VALID_MS = 2000
+        private val CPU_CORE_PATTERN = Pattern.compile("core(\\d+)(?:-(\\d+))?", Pattern.CASE_INSENSITIVE)
     }
 
     private var cpuThermalZonesCache: Map<Int, ThermalZoneInfo>? = null
     private var thermalZoneCacheTime: Long = 0
-
-
+    private var thermalInfoCache: ThermalInfo? = null
+    private var thermalInfoCacheTime: Long = 0
 
     suspend fun getThermalInfo(): ThermalInfo = withContext(Dispatchers.IO) {
-        val typesRaw = FileUtils.runCommandAsRoot("su -c \"cat ${THERMAL_BASE_PATH}thermal_zone*/type\"") ?: ""
-        val typeList = typesRaw.split('\n').filter { it.isNotBlank() }
-
-        val tempCmd = "cat " + typeList.indices.joinToString(" ") {
-            "${THERMAL_BASE_PATH}thermal_zone$it/temp"
-        }
-        val tempsRaw = FileUtils.runCommandAsRoot("su -c \"$tempCmd\"") ?: ""
-        val tempsList = tempsRaw.split('\n').filter { it.isNotBlank() }
-
-        val zoneData = mutableListOf<ThermalZone>()
-        for (i in typeList.indices) {
-            val zoneType = typeList[i]
-            val rawVal = tempsList.getOrNull(i)?.toFloatOrNull()
-            if (rawVal != null) {
-                val celsius = rawVal / 1000
-                zoneData.add(ThermalZone(zoneType, celsius))
+        val currentTime = System.currentTimeMillis()
+        thermalInfoCache?.let {
+            if (currentTime - thermalInfoCacheTime < THERMAL_CACHE_VALID_MS) {
+                return@withContext it
             }
         }
 
-        val thermald = FileUtils.runCommandAsRoot("getprop init.svc.thermald") == "running"
-        val miThermald = FileUtils.runCommandAsRoot("getprop init.svc.mi_thermald") == "running"
-        val mediatekThermald = FileUtils.runCommandAsRoot("getprop init.svc.vendor.thermal-mediatek") == "running"
-        val thermalEnabled = thermald || miThermald || mediatekThermald
+        // Execute single root command for all operations
+        val command = StringBuilder("su -c \"")
+            .append("cat ${THERMAL_BASE_PATH}thermal_zone*/type && echo '#TYPESEND#' && ")
+            .append("getprop init.svc.thermald && ")
+            .append("getprop init.svc.mi_thermald && ")
+            .append("getprop init.svc.vendor.thermal-mediatek\"")
 
-        ThermalInfo(zones = zoneData, thermalServicesEnabled = thermalEnabled)
+        val commandOutput = FileUtils.runCommandAsRoot(command.toString()) ?: ""
+        val parts = commandOutput.split("#TYPESEND#")
+
+        if (parts.size < 2) {
+            return@withContext ThermalInfo(emptyList(), false)
+        }
+
+        val typesRaw = parts[0]
+        val propResults = parts[1].trim().split('\n')
+
+        val typeList = typesRaw.split('\n').filter { it.isNotBlank() }
+
+        val tempCmd = StringBuilder("su -c \"cat ")
+        typeList.indices.forEach { i ->
+            tempCmd.append("${THERMAL_BASE_PATH}thermal_zone$i/temp ")
+        }
+        tempCmd.append("\"")
+
+        val tempsRaw = FileUtils.runCommandAsRoot(tempCmd.toString()) ?: ""
+        val tempsList = tempsRaw.split('\n').filter { it.isNotBlank() }
+
+        val zoneData = ArrayList<ThermalZone>(typeList.size)
+        for (i in typeList.indices) {
+            val zoneType = typeList[i]
+            tempsList.getOrNull(i)?.toFloatOrNull()?.let { rawVal ->
+                zoneData.add(ThermalZone(zoneType, rawVal / 1000))
+            }
+        }
+
+        val thermalEnabled = propResults.any { it.trim() == "running" }
+
+        val thermalInfoResult = ThermalInfo(zones = zoneData, thermalServicesEnabled = thermalEnabled)
+        thermalInfoCache = thermalInfoResult
+        thermalInfoCacheTime = currentTime
+        thermalInfoResult
     }
 
     suspend fun setThermalServices(enabled: Boolean): Boolean = withContext(Dispatchers.IO) {
-        if (enabled) {
-            val cmds = listOf(
-                "setprop persist.sys.turbosched.thermal_break.enable false",
-                "start thermald",
-                "start mi_thermald",
-                "start vendor.thermal-mediatek"
-            )
-            cmds.all { FileUtils.runCommandAsRoot(it) != null }
+        val commands = if (enabled) {
+            "setprop persist.sys.turbosched.thermal_break.enable false && " +
+            "start thermald && start mi_thermald && start vendor.thermal-mediatek"
         } else {
-            val cmds = listOf(
-                "setprop persist.sys.turbosched.thermal_break.enable true",
-                "stop thermald",
-                "stop mi_thermald",
-                "stop vendor.thermal-mediatek"
-            )
-            cmds.all { FileUtils.runCommandAsRoot(it) != null }
+            "setprop persist.sys.turbosched.thermal_break.enable true && " +
+            "stop thermald && stop mi_thermald && stop vendor.thermal-mediatek"
         }
+
+        val cmdOutput = FileUtils.runCommandAsRoot("su -c \"$commands\"")
+        thermalInfoCache = null
+        cmdOutput != null
     }
 
     suspend fun getCpuThermalZones(): Map<Int, ThermalZoneInfo> = withContext(Dispatchers.IO) {
         val currentTime = System.currentTimeMillis()
         cpuThermalZonesCache?.let {
             if (currentTime - thermalZoneCacheTime < THERMAL_CACHE_VALID_MS) {
-                Log.d("ThermalManager", "Using cached thermal zone data")
                 return@withContext it
             }
         }
@@ -81,51 +98,42 @@ class ThermalManager {
         val typesRaw = FileUtils.runCommandAsRoot("su -c \"cat ${THERMAL_BASE_PATH}thermal_zone*/type\"") ?: ""
         val types = typesRaw.split('\n').filter { it.isNotBlank() }
 
-        Log.d("ThermalManager", "Found ${types.size} total thermal zones by type listing")
-
-        val cpuZoneIndices = mutableListOf<Int>()
-        val cpuZoneTypes = mutableListOf<String>()
+        val cpuZones = ArrayList<Pair<Int, String>>(types.size / 2)
         for ((index, type) in types.withIndex()) {
-            if ((type.contains("cpu", ignoreCase = true) || type.contains("core", ignoreCase = true))
-                && !type.contains("dsu", ignoreCase = true)
-            ) {
-                cpuZoneIndices.add(index)
-                cpuZoneTypes.add(type)
-                Log.d("ThermalManager", "Potential CPU zone: thermal_zone$index => $type")
+            if ((type.contains("cpu", true) || type.contains("core", true)) && !type.contains("dsu", true)) {
+                cpuZones.add(Pair(index, type))
             }
         }
 
-        val tempCommand = "cat " + cpuZoneIndices.joinToString(" ") {
-            "${THERMAL_BASE_PATH}thermal_zone$it/temp"
+        if (cpuZones.isEmpty()) {
+            return@withContext emptyMap()
         }
-        val tempRawItems = if (cpuZoneIndices.isNotEmpty()) {
-            FileUtils.runCommandAsRoot("su -c \"$tempCommand\"")?.split('\n')?.filter { it.isNotBlank() }
-        } else null
 
-        val tempRecords = mutableListOf<TempRecord>()
+        val tempCommand = StringBuilder("su -c \"cat ")
+        cpuZones.forEach { (index, _) ->
+            tempCommand.append("${THERMAL_BASE_PATH}thermal_zone$index/temp ")
+        }
+        tempCommand.append("\"")
 
-        for (i in cpuZoneIndices.indices) {
-            val zoneId = cpuZoneIndices[i]
-            val zoneType = cpuZoneTypes[i]
-            val tempValRaw = tempRawItems?.getOrNull(i)?.toFloatOrNull()
-                ?: FileUtils.readFileAsRoot("${THERMAL_BASE_PATH}thermal_zone$zoneId/temp")?.toFloatOrNull()
-                ?: continue
+        val tempRawItems = FileUtils.runCommandAsRoot(tempCommand.toString())
+            ?.split('\n')?.filter { it.isNotBlank() }
+            ?: return@withContext emptyMap()
 
-            val tempCelsius = tempValRaw / 1000f
-            var cpuType: String? = null
+        val tempRecords = ArrayList<TempRecord>(cpuZones.size)
+
+        for (i in cpuZones.indices) {
+            val (zoneId, zoneType) = cpuZones[i]
+            val tempValRaw = tempRawItems.getOrNull(i)?.toFloatOrNull() ?: continue
+
+            val cpuType = when {
+                zoneType.contains("little", true) -> "little"
+                zoneType.contains("medium", true) -> "medium"
+                zoneType.contains("big", true) || zoneType.contains("prime", true) -> "big"
+                else -> null
+            }
+
             var coreNumber: Int? = null
-
-            when {
-                zoneType.contains("little", ignoreCase = true) -> cpuType = "little"
-                zoneType.contains("medium", ignoreCase = true) -> cpuType = "medium"
-                zoneType.contains("big", ignoreCase = true) || zoneType.contains(
-                    "prime",
-                    ignoreCase = true
-                ) -> cpuType = "big"
-            }
-
-            val pattern = Pattern.compile("core(\\d+)(?:-(\\d+))?", Pattern.CASE_INSENSITIVE)
-            val matcher = pattern.matcher(zoneType)
+            val matcher = CPU_CORE_PATTERN.matcher(zoneType)
             if (matcher.find()) {
                 coreNumber = matcher.group(1)?.toIntOrNull()
             }
@@ -134,41 +142,45 @@ class ThermalManager {
                 TempRecord(
                     zoneId = zoneId,
                     zoneType = zoneType,
-                    temperature = tempCelsius,
+                    temperature = tempValRaw / 1000f,
                     cpuType = cpuType,
                     coreNumber = coreNumber
                 )
             )
         }
 
-        val grouped = tempRecords.groupBy { Pair(it.cpuType, it.coreNumber) }
-        val finalMap = mutableMapOf<Int, ThermalZoneInfo>()
+        val finalMap = HashMap<Int, ThermalZoneInfo>(tempRecords.size)
         var assignedZoneId = 0
 
-        grouped.forEach { (key, list) ->
-            if (key.first != null && key.second != null && list.isNotEmpty()) {
-                val avgTemp = list.map { it.temperature }.average().toFloat()
-                finalMap[assignedZoneId] = ThermalZoneInfo(
-                    zoneId = assignedZoneId,
-                    type = "cpu-${key.first}-core${key.second}",
-                    temp = avgTemp,
-                    cpuType = key.first,
-                    coreNumber = key.second
-                )
-                assignedZoneId++
-            } else {
-                list.forEach { rec ->
+        tempRecords.groupBy { Pair(it.cpuType, it.coreNumber) }
+            .forEach { (key, list) ->
+                val (cpuType, coreNumber) = key
+
+                if (cpuType != null && coreNumber != null && list.isNotEmpty()) {
+                    var sum = 0f
+                    list.forEach { sum += it.temperature }
+
                     finalMap[assignedZoneId] = ThermalZoneInfo(
                         zoneId = assignedZoneId,
-                        type = rec.zoneType,
-                        temp = rec.temperature,
-                        cpuType = rec.cpuType,
-                        coreNumber = rec.coreNumber
+                        type = "cpu-$cpuType-core$coreNumber",
+                        temp = sum / list.size,
+                        cpuType = cpuType,
+                        coreNumber = coreNumber
                     )
                     assignedZoneId++
+                } else {
+                    list.forEach { rec ->
+                        finalMap[assignedZoneId] = ThermalZoneInfo(
+                            zoneId = assignedZoneId,
+                            type = rec.zoneType,
+                            temp = rec.temperature,
+                            cpuType = rec.cpuType,
+                            coreNumber = rec.coreNumber
+                        )
+                        assignedZoneId++
+                    }
                 }
             }
-        }
 
         cpuThermalZonesCache = finalMap
         thermalZoneCacheTime = currentTime
