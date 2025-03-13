@@ -1,11 +1,14 @@
-name: Generated APK AAB (Upload - Create Artifact To Github Action)
+name: Build and Release Android App
 
 env:
   main_project_module: app
-  playstore_name: Champ Kernel Manager
+  app_name: Champ Kernel Manager
 
 on:
   push:
+    branches: [ main ]
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -14,14 +17,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Set current date as env variable
-        run: echo "date_today=$(date +'%Y-%m-%d_%H-%M-%S')" >> $GITHUB_ENV
+      - name: Set environment variables
+        run: |
+          echo "date_today=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+          echo "build_number=$(date +'%Y%m%d%H%M')" >> $GITHUB_ENV
+          echo "repository_name=$(echo '${{ github.repository }}' | awk -F '/' '{print $2}')" >> $GITHUB_ENV
+          echo "commit_hash=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
 
-      - name: Set repository name as env variable
-        run: echo "repository_name=$(echo '${{ github.repository }}' | awk -F '/' '{print $2}')" >> $GITHUB_ENV
-
-      # Cache Gradle Wrapper separately
+      # Cache configuration
       - name: Cache Gradle Wrapper
         uses: actions/cache@v3
         with:
@@ -30,7 +36,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-wrapper-
 
-      # Cache Gradle Dependencies
       - name: Cache Gradle Dependencies
         uses: actions/cache@v3
         with:
@@ -39,7 +44,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-caches-
 
-      # Cache Android build folder
       - name: Cache Android Build
         uses: actions/cache@v3
         with:
@@ -60,13 +64,13 @@ jobs:
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
 
-      - name: Run gradle tests
+      - name: Run tests
         run: ./gradlew test --build-cache --parallel --no-daemon
 
-      - name: Build gradle project
+      - name: Build project
         run: ./gradlew build --build-cache --parallel --no-daemon
 
-      - name: Build apk debug project (APK)
+      - name: Build debug APK
         run: ./gradlew assembleDebug --build-cache --parallel --no-daemon
 
       - name: Decode keystore
@@ -92,12 +96,64 @@ jobs:
             -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
             -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
 
+      - name: Upload to VirusTotal
+        id: virustotal
+        run: |
+          APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          echo "APK_FILENAME=$(basename $APK_PATH)" >> $GITHUB_ENV
+          
+          RESPONSE=$(curl -s \
+            --url https://www.virustotal.com/api/v3/files \
+            --header "x-apikey: ${{ secrets.VIRUSTOTAL_API_KEY }}" \
+            --form file=@$APK_PATH)
+          
+          ANALYSIS_ID=$(echo $RESPONSE | jq -r '.data.id')
+          ANALYSIS_URL="https://www.virustotal.com/gui/file-analysis/$ANALYSIS_ID"
+          
+          echo "vt_analysis_url=$ANALYSIS_URL" >> $GITHUB_ENV
+          echo "VirusTotal scan submitted. Analysis URL: $ANALYSIS_URL"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          CHANGELOG=$(git log -10 --pretty=format:"- %s (%h)" --abbrev-commit)
+          echo "CHANGELOG<<EOF" >> $GITHUB_ENV
+          echo "$CHANGELOG" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Create Release Notes
+        run: |
+          cat > release_notes.md << EOL
+          # ${{ env.app_name }} - Build ${{ env.build_number }}
+          
+          ![Build Status](https://github.com/${{ github.repository }}/actions/workflows/build.yml/badge.svg)
+          
+          ## Release Information
+          - **Version**: ${{ env.date_today }}-${{ env.commit_hash }}
+          - **Build Date**: $(date +'%B %d, %Y')
+          
+          ## Security
+          - [VirusTotal Scan Results](${{ env.vt_analysis_url }})
+          
+          ## Recent Changes
+          ${{ env.CHANGELOG }}
+          
+          ## Installation
+          1. Download the APK file
+          2. Enable "Install from Unknown Sources" in your device settings
+          3. Install the application
+          
+          ## Support
+          If you encounter any issues, please [open an issue](https://github.com/${{ github.repository }}/issues/new) on GitHub.
+          EOL
+
       - name: Create Pre-release
         uses: softprops/action-gh-release@v1
         with:
-          name: ${{ env.date_today }} - ${{ env.playstore_name }}
-          tag_name: v${{ env.date_today }}
+          name: ${{ env.app_name }} - ${{ env.date_today }}
+          tag_name: v${{ env.date_today }}-${{ env.commit_hash }}
           prerelease: true
+          body_path: release_notes.md
           files: |
             app/build/outputs/apk/debug/*.apk
             app/build/outputs/apk/release/*.apk
@@ -108,17 +164,17 @@ jobs:
       - name: Upload APK Debug - Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.date_today }} - ${{ env.playstore_name }} - ${{ env.repository_name }} - APK(s) debug generated
+          name: ${{ env.app_name }}-${{ env.date_today }}-debug
           path: app/build/outputs/apk/debug/
 
       - name: Upload APK Release - Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.date_today }} - ${{ env.playstore_name }} - ${{ env.repository_name }} - APK(s) release generated
+          name: ${{ env.app_name }}-${{ env.date_today }}-release
           path: app/build/outputs/apk/release/
 
-      - name: Upload AAB (App Bundle) Release - Artifact
+      - name: Upload AAB Release - Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.date_today }} - ${{ env.playstore_name }} - ${{ env.repository_name }} - App bundle(s) AAB release generated
+          name: ${{ env.app_name }}-${{ env.date_today }}-bundle
           path: app/build/outputs/bundle/release/
