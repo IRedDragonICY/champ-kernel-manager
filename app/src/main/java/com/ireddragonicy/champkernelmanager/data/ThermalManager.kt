@@ -98,14 +98,6 @@ class ThermalManager {
             FileUtils.runCommandAsRoot("su -c \"$tempCommand\"")?.split('\n')?.filter { it.isNotBlank() }
         } else null
 
-        data class TempRecord(
-            val zoneId: Int,
-            val zoneType: String,
-            val temperature: Float,
-            val cpuType: String?,
-            val coreNumber: Int?
-        )
-
         val tempRecords = mutableListOf<TempRecord>()
 
         for (i in cpuZoneIndices.indices) {

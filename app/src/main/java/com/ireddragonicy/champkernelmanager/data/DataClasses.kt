@@ -65,6 +65,14 @@ data class ThermalInfo(
     val thermalServicesEnabled: Boolean
 )
 
+data class TempRecord(
+    val zoneId: Int,
+    val zoneType: String,
+    val temperature: Float,
+    val cpuType: String?,
+    val coreNumber: Int?
+)
+
 data class SystemInfo(
     val kernelVersion: String,
     val kernelBuild: String,
