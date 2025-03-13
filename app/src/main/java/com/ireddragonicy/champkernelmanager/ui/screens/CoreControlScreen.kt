@@ -11,8 +11,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.ireddragonicy.champkernelmanager.data.CpuClusterInfo
-import com.ireddragonicy.champkernelmanager.data.CoreControlInfo
+import com.ireddragonicy.champkernelmanager.data.models.CoreControlInfo
+import com.ireddragonicy.champkernelmanager.data.models.CpuClusterInfo
 import com.ireddragonicy.champkernelmanager.data.DataRepository
 import com.ireddragonicy.champkernelmanager.ui.components.CoreControlGrid
 import kotlinx.coroutines.launch

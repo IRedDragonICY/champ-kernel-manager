@@ -1,6 +1,7 @@
 package com.ireddragonicy.champkernelmanager.data
 
 import android.os.SystemClock
+import com.ireddragonicy.champkernelmanager.data.models.SystemInfo
 import com.ireddragonicy.champkernelmanager.utils.FileUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

@@ -1,5 +1,12 @@
 package com.ireddragonicy.champkernelmanager.data
 
+import com.ireddragonicy.champkernelmanager.data.models.BatteryInfo
+import com.ireddragonicy.champkernelmanager.data.models.CoreControlInfo
+import com.ireddragonicy.champkernelmanager.data.models.CpuClusterInfo
+import com.ireddragonicy.champkernelmanager.data.models.DevfreqInfo
+import com.ireddragonicy.champkernelmanager.data.models.ThermalInfo
+import com.ireddragonicy.champkernelmanager.data.models.SystemInfo
+
 
 class DataRepository private constructor() {
     companion object {
@@ -15,11 +22,11 @@ class DataRepository private constructor() {
         }
     }
 
-    private val cpuManager = CpuManager()
-    private val gpuManager = GpuManager()
-    private val batteryManager = BatteryManager()
-    private val thermalManager = ThermalManager()
-    private val systemManager = SystemManager()
+    private val cpuManager by lazy { CpuManager() }
+    private val gpuManager by lazy { GpuManager() }
+    private val batteryManager by lazy { BatteryManager() }
+    private val thermalManager by lazy { ThermalManager() }
+    private val systemManager by lazy { SystemManager() }
 
     suspend fun getSystemLoad(): String = systemManager.getSystemLoad()
     suspend fun getCpuClusters(): List<CpuClusterInfo> = cpuManager.getCpuClusters()
@@ -45,13 +52,4 @@ class DataRepository private constructor() {
     suspend fun getSystemInfo(): SystemInfo = systemManager.getSystemInfo()
     suspend fun setIoScheduler(scheduler: String): Boolean = systemManager.setIoScheduler(scheduler)
     suspend fun setTcpCongestion(algorithm: String): Boolean = systemManager.setTcpCongestion(algorithm)
-
-
 }
-
-
-
-
-
-
-

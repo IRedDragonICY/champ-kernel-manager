@@ -26,8 +26,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.ireddragonicy.champkernelmanager.data.CpuClusterInfo
-import com.ireddragonicy.champkernelmanager.data.CoreControlInfo
+import com.ireddragonicy.champkernelmanager.data.models.CpuClusterInfo
+import com.ireddragonicy.champkernelmanager.data.models.CoreControlInfo
 
 @Composable
 fun CoreControlGrid(

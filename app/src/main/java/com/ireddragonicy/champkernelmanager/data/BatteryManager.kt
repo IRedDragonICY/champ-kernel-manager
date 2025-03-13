@@ -1,5 +1,6 @@
 package com.ireddragonicy.champkernelmanager.data
 
+import com.ireddragonicy.champkernelmanager.data.models.BatteryInfo
 import com.ireddragonicy.champkernelmanager.utils.FileUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

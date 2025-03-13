@@ -1,6 +1,10 @@
 package com.ireddragonicy.champkernelmanager.data
 
 import android.util.Log
+import com.ireddragonicy.champkernelmanager.data.models.TempRecord
+import com.ireddragonicy.champkernelmanager.data.models.ThermalInfo
+import com.ireddragonicy.champkernelmanager.data.models.ThermalZone
+import com.ireddragonicy.champkernelmanager.data.models.ThermalZoneInfo
 import com.ireddragonicy.champkernelmanager.utils.FileUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

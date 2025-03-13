@@ -97,21 +97,18 @@ fun ProfileSection() {
             SaveProfileDialog(
                 onSave = { profileName ->
                     scope.launch {
-                        // Get current CPU governor
                         val cpuInfo = dataRepository.getCpuClusters()
                         val currentGovernor = cpuInfo.firstOrNull()?.cores?.firstOrNull()?.governor
                         if (currentGovernor != null && currentGovernor != "N/A") {
                             appSettings.savedCpuGovernor = currentGovernor
                         }
                         
-                        // Get current GPU settings
                         val gpuInfo = dataRepository.getGpuInfo()
                         appSettings.savedGpuGovernor = gpuInfo.currentGovernor
                         appSettings.savedGpuMaxFreq = gpuInfo.maxFreqMHz
                         appSettings.savedGpuMinFreq = gpuInfo.minFreqMHz
                         
 
-                        // Get system settings
                         val systemInfo = dataRepository.getSystemInfo()
                         appSettings.savedIoScheduler = systemInfo.currentIoScheduler
                         appSettings.savedTcpCongestion = systemInfo.currentTcpCongestion

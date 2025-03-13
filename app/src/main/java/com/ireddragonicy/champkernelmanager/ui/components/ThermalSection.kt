@@ -19,7 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.ireddragonicy.champkernelmanager.data.DataRepository
-import com.ireddragonicy.champkernelmanager.data.ThermalInfo
+import com.ireddragonicy.champkernelmanager.data.models.ThermalInfo
 import kotlinx.coroutines.launch
 
 @Composable

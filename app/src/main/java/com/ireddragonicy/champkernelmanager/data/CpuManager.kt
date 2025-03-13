@@ -1,5 +1,8 @@
 package com.ireddragonicy.champkernelmanager.data
 
+import com.ireddragonicy.champkernelmanager.data.models.CoreControlInfo
+import com.ireddragonicy.champkernelmanager.data.models.CpuClusterInfo
+import com.ireddragonicy.champkernelmanager.data.models.CpuCoreInfo
 import com.ireddragonicy.champkernelmanager.utils.FileUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

@@ -11,9 +11,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.ireddragonicy.champkernelmanager.data.CpuClusterInfo
-import com.ireddragonicy.champkernelmanager.data.CpuCoreInfo
-import com.ireddragonicy.champkernelmanager.data.CoreControlInfo
+import com.ireddragonicy.champkernelmanager.data.models.CoreControlInfo
+import com.ireddragonicy.champkernelmanager.data.models.CpuClusterInfo
+import com.ireddragonicy.champkernelmanager.data.models.CpuCoreInfo
 import com.ireddragonicy.champkernelmanager.data.DataRepository
 import kotlinx.coroutines.launch
 
