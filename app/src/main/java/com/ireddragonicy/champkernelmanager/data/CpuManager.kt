@@ -6,7 +6,6 @@ import com.ireddragonicy.champkernelmanager.data.models.CpuCoreInfo
 import com.ireddragonicy.champkernelmanager.utils.FileUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.util.*
 
 class CpuManager {
     companion object {
@@ -19,7 +18,7 @@ class CpuManager {
 
     suspend fun getCpuClusters(): List<CpuClusterInfo> = withContext(Dispatchers.IO) {
         val coreCount = Runtime.getRuntime().availableProcessors()
-        val temperaturesMap = getCpuTemperatures()
+        val temperaturesMap = thermalManager.getCpuTemperatures()
 
         val cpuCoreInfos = (0 until coreCount).map { core ->
             val basePath = "$CPU_PATH$core$CPU_FREQ_PATH"
@@ -103,77 +102,5 @@ class CpuManager {
     suspend fun setCoreState(core: Int, enabled: Boolean): Boolean = withContext(Dispatchers.IO) {
         if (core == 0) return@withContext false
         FileUtils.writeFileAsRoot("$CPU_PATH$core$CPU_ONLINE_PATH", if (enabled) "1" else "0")
-    }
-
-    private suspend fun getCpuTemperatures(): Map<Int, String> = withContext(Dispatchers.IO) {
-        val coreCount = Runtime.getRuntime().availableProcessors()
-        val results = mutableMapOf<Int, String>()
-        val allZones = thermalManager.getCpuThermalZones()
-
-        for (coreIndex in 0 until coreCount) {
-            val directZone = allZones.values.find { it.coreNumber == coreIndex && it.temp > 1f }
-            if (directZone != null) {
-                results[coreIndex] = String.format(Locale.US, "%.1f°C", directZone.temp)
-            }
-        }
-
-        val littleZones = allZones.values.filter { it.cpuType == "little" && it.temp > 1f }
-        val mediumZones = allZones.values.filter { it.cpuType == "medium" && it.temp > 1f }
-        val bigZones = allZones.values.filter { it.cpuType == "big" && it.temp > 1f }
-
-        if (coreCount == 8) {
-            for (coreIndex in 0 until 8) {
-                if (coreIndex in results) continue
-                when {
-                    coreIndex in 0..3 && littleZones.isNotEmpty() -> {
-                        val avg = littleZones.map { it.temp }.average().toFloat()
-                        results[coreIndex] = String.format(Locale.US, "%.1f°C", avg)
-                    }
-                    coreIndex in 4..6 && mediumZones.isNotEmpty() -> {
-                        val avg = mediumZones.map { it.temp }.average().toFloat()
-                        results[coreIndex] = String.format(Locale.US, "%.1f°C", avg)
-                    }
-                    coreIndex == 7 && bigZones.isNotEmpty() -> {
-                        val avg = bigZones.map { it.temp }.average().toFloat()
-                        results[coreIndex] = String.format(Locale.US, "%.1f°C", avg)
-                    }
-                }
-            }
-        } else {
-            for (coreIndex in 0 until coreCount) {
-                if (coreIndex in results) continue
-                when {
-                    coreIndex < (coreCount / 2) && littleZones.isNotEmpty() -> {
-                        val avg = littleZones.map { it.temp }.average().toFloat()
-                        results[coreIndex] = String.format(Locale.US, "%.1f°C", avg)
-                    }
-                    else -> {
-                        val perfZones = if (bigZones.isNotEmpty()) bigZones else mediumZones
-                        if (perfZones.isNotEmpty()) {
-                            val avg = perfZones.map { it.temp }.average().toFloat()
-                            results[coreIndex] = String.format(Locale.US, "%.1f°C", avg)
-                        }
-                    }
-                }
-            }
-        }
-
-        val genericCpuZones = allZones.values.filter {
-            it.type.contains("cpu", ignoreCase = true) && it.temp > 1f && !it.type.contains("dsu", ignoreCase = true)
-        }
-        for (coreIndex in 0 until coreCount) {
-            if (coreIndex !in results && genericCpuZones.isNotEmpty()) {
-                val avg = genericCpuZones.map { it.temp }.average().toFloat()
-                results[coreIndex] = String.format(Locale.US, "%.1f°C", avg)
-            }
-        }
-
-        for (coreIndex in 0 until coreCount) {
-            if (coreIndex !in results) {
-                results[coreIndex] = "N/A"
-            }
-        }
-
-        results
     }
 }

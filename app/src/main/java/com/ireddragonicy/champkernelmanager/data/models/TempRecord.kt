@@ -5,5 +5,6 @@ data class TempRecord(
     val zoneType: String,
     val temperature: Float,
     val cpuType: String?,
-    val coreNumber: Int?
+    val coreNumber: Int?,
+    val thermalZonePath: String
 )

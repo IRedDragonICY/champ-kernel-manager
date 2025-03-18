@@ -5,5 +5,6 @@ data class ThermalZoneInfo(
     val type: String,
     val temp: Float,
     val cpuType: String? = null,
-    val coreNumber: Int? = null
+    val coreNumber: Int? = null,
+    val sourceThermalZones: String
 )

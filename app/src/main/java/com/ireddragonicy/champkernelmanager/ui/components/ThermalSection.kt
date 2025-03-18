@@ -40,14 +40,24 @@ fun ThermalSection(refreshTrigger: Int) {
     ) {
         thermalInfo?.let { thermal ->
             Column {
-                thermal.zones.forEach { zone ->
-                    InfoRow(title = zone.name, value = "${zone.temp}°C")
+                thermal.zones.forEachIndexed { index, zone ->
+                    Column {
+                        InfoRow(
+                            title = zone.name,
+                            value = "${zone.temp}°C"
+                        )
+                        Text(
+                            text = "Path: /sys/class/thermal/thermal_zone$index",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
                 var thermalControlEnabled by remember { mutableStateOf(thermal.thermalServicesEnabled) }
-                
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -59,7 +69,7 @@ fun ThermalSection(refreshTrigger: Int) {
                     )
                     SwitchWithLabel(
                         checked = thermalControlEnabled,
-                        onCheckedChange = { 
+                        onCheckedChange = {
                             coroutineScope.launch {
                                 if (dataRepository.setThermalServices(it)) {
                                     thermalControlEnabled = it
@@ -69,7 +79,7 @@ fun ThermalSection(refreshTrigger: Int) {
                         label = if (thermalControlEnabled) "Enabled" else "Disabled"
                     )
                 }
-                
+
                 if (!thermalControlEnabled) {
                     Text(
                         text = "Warning: Disabling thermal services may cause your device to overheat. Use with caution!",
@@ -78,10 +88,7 @@ fun ThermalSection(refreshTrigger: Int) {
                         modifier = Modifier.padding(top = 8.dp)
                     )
                 }
-
-
-                }
             }
-
+        }
     }
 }
