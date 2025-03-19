@@ -13,13 +13,13 @@ import com.ireddragonicy.champkernelmanager.data.models.DevfreqInfo
 import kotlinx.coroutines.launch
 
 @Composable
-fun GpuSection(refreshTrigger: Int) {
+fun GpuSection() {
     var expanded by remember { mutableStateOf(false) }
     var gpuInfo by remember { mutableStateOf<DevfreqInfo?>(null) }
     val dataRepository = DataRepository.getInstance()
     val coroutineScope = rememberCoroutineScope()
-    
-    LaunchedEffect(refreshTrigger) {
+
+    LaunchedEffect(Unit) {
         gpuInfo = dataRepository.getGpuInfo()
     }
 
@@ -31,41 +31,41 @@ fun GpuSection(refreshTrigger: Int) {
         Column {
             gpuInfo?.let { gpu ->
                 DevfreqInfoDisplay(devfreqInfo = gpu)
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
                 var expandedFreqMax by remember { mutableStateOf(false) }
                 var expandedFreqMin by remember { mutableStateOf(false) }
                 var expandedGovernor by remember { mutableStateOf(false) }
-                
+
                 FrequencySelector(
                     title = "Max Frequency",
                     current = gpu.maxFreqMHz,
                     options = gpu.availableFrequenciesMHz,
                     expanded = expandedFreqMax,
                     onExpandChange = { expandedFreqMax = it },
-                    onOptionSelected = { 
+                    onOptionSelected = {
                         coroutineScope.launch {
                             dataRepository.setGpuMaxFreq(it)
                             expandedFreqMax = false
                         }
                     }
                 )
-                
+
                 FrequencySelector(
                     title = "Min Frequency",
                     current = gpu.minFreqMHz,
                     options = gpu.availableFrequenciesMHz,
                     expanded = expandedFreqMin,
                     onExpandChange = { expandedFreqMin = it },
-                    onOptionSelected = { 
+                    onOptionSelected = {
                         coroutineScope.launch {
                             dataRepository.setGpuMinFreq(it)
                             expandedFreqMin = false
                         }
                     }
                 )
-                
+
                 if (gpu.availableGovernors.isNotEmpty()) {
                     GovernorSelector(
                         title = "GPU Governor",
@@ -73,7 +73,7 @@ fun GpuSection(refreshTrigger: Int) {
                         options = gpu.availableGovernors,
                         expanded = expandedGovernor,
                         onExpandChange = { expandedGovernor = it },
-                        onOptionSelected = { 
+                        onOptionSelected = {
                             coroutineScope.launch {
                                 dataRepository.setGpuGovernor(it)
                                 expandedGovernor = false

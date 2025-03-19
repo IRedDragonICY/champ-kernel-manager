@@ -23,16 +23,16 @@ import com.ireddragonicy.champkernelmanager.data.models.ThermalInfo
 import kotlinx.coroutines.launch
 
 @Composable
-fun ThermalSection(refreshTrigger: Int) {
+fun ThermalSection() {
     var expanded by remember { mutableStateOf(false) }
     var thermalInfo by remember { mutableStateOf<ThermalInfo?>(null) }
     val dataRepository = DataRepository.getInstance()
     val coroutineScope = rememberCoroutineScope()
-    
-    LaunchedEffect(refreshTrigger) {
+
+    LaunchedEffect(Unit) {
         thermalInfo = dataRepository.getThermalInfo()
     }
-    
+
     SectionCard(
         title = "Thermal",
         expanded = expanded,

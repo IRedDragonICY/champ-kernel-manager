@@ -15,11 +15,11 @@ import com.ireddragonicy.champkernelmanager.data.models.CoreControlInfo
 import com.ireddragonicy.champkernelmanager.data.models.CpuClusterInfo
 import com.ireddragonicy.champkernelmanager.data.models.CpuCoreInfo
 import com.ireddragonicy.champkernelmanager.data.DataRepository
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
 fun CpuSection(
-    refreshTrigger: Int,
     onNavigateToCoreControl: () -> Unit
 ) {
     var clusters by remember { mutableStateOf<List<CpuClusterInfo>>(emptyList()) }
@@ -39,18 +39,29 @@ fun CpuSection(
 
     var coreToClusterMap by remember { mutableStateOf<Map<Int, String>>(emptyMap()) }
 
-    LaunchedEffect(refreshTrigger) {
-        clusters = dataRepository.getCpuClusters()
+    // Initial data load
+    LaunchedEffect(Unit) {
+        // One-time data loads
         availableGovernors = dataRepository.getAvailableGovernors()
         coreControlInfo = dataRepository.getCoreControlInfo()
 
-        val rawLoad = dataRepository.getSystemLoad()
-        systemLoads = rawLoad.split(" ").filter { it.isNotBlank() }
+        // Start monitoring loop - updates every 500ms
+        while (true) {
+            // Update CPU clusters and core information
+            clusters = dataRepository.getCpuClusters()
+            cores = clusters.flatMap { it.cores }.sortedBy { it.core }
 
-        cores = clusters.flatMap { it.cores }.sortedBy { it.core }
-        coreToClusterMap = clusters.flatMap { cluster ->
-            cluster.cores.map { core -> core.core to cluster.name }
-        }.toMap()
+            // Update core-to-cluster mapping
+            coreToClusterMap = clusters.flatMap { cluster ->
+                cluster.cores.map { core -> core.core to cluster.name }
+            }.toMap()
+
+            // Update system load information
+            val rawLoad = dataRepository.getSystemLoad()
+            systemLoads = rawLoad.split(" ").filter { it.isNotBlank() }
+
+            delay(500) // 500ms refresh rate
+        }
     }
 
     Column(
@@ -105,8 +116,6 @@ fun CpuSection(
                                                         it.copy(online = newState)
                                                     else it
                                                 }
-                                                clusters = dataRepository.getCpuClusters()
-                                                cores = clusters.flatMap { it.cores }.sortedBy { it.core }
                                             }
                                         }
                                     }

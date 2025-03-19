@@ -13,16 +13,16 @@ import com.ireddragonicy.champkernelmanager.data.models.BatteryInfo
 import kotlinx.coroutines.launch
 
 @Composable
-fun BatterySection(refreshTrigger: Int) {
+fun BatterySection() {
     var expanded by remember { mutableStateOf(false) }
     var batteryInfo by remember { mutableStateOf<BatteryInfo?>(null) }
     val dataRepository = DataRepository.getInstance()
     val coroutineScope = rememberCoroutineScope()
-    
-    LaunchedEffect(refreshTrigger) {
+
+    LaunchedEffect(Unit) {
         batteryInfo = dataRepository.getBatteryInfo()
     }
-    
+
     SectionCard(
         title = "Battery",
         expanded = expanded,
@@ -37,12 +37,12 @@ fun BatterySection(refreshTrigger: Int) {
                 InfoRow(title = "Voltage", value = "${battery.voltage}mV")
                 InfoRow(title = "Health", value = battery.health)
                 InfoRow(title = "Technology", value = battery.technology)
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
                 if (battery.fastChargeSupported) {
                     var fastChargeEnabled by remember { mutableStateOf(battery.fastChargeEnabled) }
-                    
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
@@ -54,7 +54,7 @@ fun BatterySection(refreshTrigger: Int) {
                         )
                         SwitchWithLabel(
                             checked = fastChargeEnabled,
-                            onCheckedChange = { 
+                            onCheckedChange = {
                                 coroutineScope.launch {
                                     if (dataRepository.setFastCharge(it)) {
                                         fastChargeEnabled = it
@@ -65,7 +65,7 @@ fun BatterySection(refreshTrigger: Int) {
                         )
                     }
                 }
-                
+
                 if (battery.chargingLimitSupported) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(

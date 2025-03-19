@@ -17,16 +17,16 @@ import com.ireddragonicy.champkernelmanager.data.models.SystemInfo
 import kotlinx.coroutines.launch
 
 @Composable
-fun SystemSection(refreshTrigger: Int) {
+fun SystemSection() {
     var expanded by remember { mutableStateOf(false) }
     var systemInfo by remember { mutableStateOf<SystemInfo?>(null) }
     val dataRepository = DataRepository.getInstance()
     val coroutineScope = rememberCoroutineScope()
-    
-    LaunchedEffect(refreshTrigger) {
+
+    LaunchedEffect(Unit) {
         systemInfo = dataRepository.getSystemInfo()
     }
-    
+
     SectionCard(
         title = "System",
         expanded = expanded,
@@ -41,35 +41,35 @@ fun SystemSection(refreshTrigger: Int) {
                 InfoRow(title = "Android Version", value = info.androidVersion)
                 InfoRow(title = "Uptime", value = info.uptime)
                 InfoRow(title = "SELinux Status", value = info.selinuxStatus)
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
                 var expandedIOScheduler by remember { mutableStateOf(false) }
-                
+
                 SettingsDropdown(
                     title = "I/O Scheduler",
                     current = info.currentIoScheduler,
                     options = info.availableIoSchedulers,
                     expanded = expandedIOScheduler,
                     onExpandChange = { expandedIOScheduler = it },
-                    onOptionSelected = { 
+                    onOptionSelected = {
                         coroutineScope.launch {
                             dataRepository.setIoScheduler(it)
                             expandedIOScheduler = false
                         }
                     }
                 )
-                
+
                 if (info.availableTcpCongestion.isNotEmpty()) {
                     var expandedTcp by remember { mutableStateOf(false) }
-                    
+
                     SettingsDropdown(
                         title = "TCP Congestion",
                         current = info.currentTcpCongestion,
                         options = info.availableTcpCongestion,
                         expanded = expandedTcp,
                         onExpandChange = { expandedTcp = it },
-                        onOptionSelected = { 
+                        onOptionSelected = {
                             coroutineScope.launch {
                                 dataRepository.setTcpCongestion(it)
                                 expandedTcp = false
