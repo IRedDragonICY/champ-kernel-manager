@@ -208,16 +208,14 @@ jobs:
               fi
             fi
             
-            # Save info file - one file per APK for reliable passing between jobs
-            cat > "apk_info/${APK_FILENAME}.txt" << EOF
-            FILENAME=${APK_FILENAME}
-            ARCH=${ARCH}
-            SIZE=${APK_SIZE}
-            SHA256=${SHA256}
-            VARIANT=${VARIANT}
-            VT_RESULT=${VT_RESULT}
-            VT_URL=${VT_URL}
-            EOF
+            # Write APK info to file - fixed here-document syntax
+            echo "FILENAME=${APK_FILENAME}" > "apk_info/${APK_FILENAME}.txt"
+            echo "ARCH=${ARCH}" >> "apk_info/${APK_FILENAME}.txt"
+            echo "SIZE=${APK_SIZE}" >> "apk_info/${APK_FILENAME}.txt"
+            echo "SHA256=${SHA256}" >> "apk_info/${APK_FILENAME}.txt"
+            echo "VARIANT=${VARIANT}" >> "apk_info/${APK_FILENAME}.txt"
+            echo "VT_RESULT=${VT_RESULT}" >> "apk_info/${APK_FILENAME}.txt"
+            echo "VT_URL=${VT_URL}" >> "apk_info/${APK_FILENAME}.txt"
             
             echo "Processed: $APK_FILENAME ($ARCH, $VARIANT)"
             echo "VirusTotal: $VT_RESULT"
@@ -271,13 +269,32 @@ jobs:
           echo "| Filename | Architecture | Size | VirusTotal | SHA-256 |" >> release_notes.md
           echo "|----------|--------------|------|------------|---------|" >> release_notes.md
           
+          # Loop through each info file
           for INFO_FILE in artifacts/apk_info/*.txt; do
-            source "$INFO_FILE"
-            FILENAME_LINK="[$FILENAME](https://github.com/${{ github.repository }}/releases/download/v${{ needs.test.outputs.date_today }}-${{ needs.test.outputs.commit_hash }}/$FILENAME)"
-            VIRUSTOTAL_LINK="[$VT_RESULT]($VT_URL)"
+            # Read the file line by line
+            while IFS= read -r line; do
+              # Process each line to extract key-value pairs
+              key="${line%%=*}"
+              value="${line#*=}"
+              
+              # Store values in variables
+              case "$key" in
+                FILENAME) APK_FILENAME="$value" ;;
+                ARCH) ARCH="$value" ;;
+                SIZE) SIZE="$value" ;;
+                SHA256) SHA256="$value" ;;
+                VARIANT) VARIANT="$value" ;;
+                VT_RESULT) VT_RESULT="$value" ;;
+                VT_URL) VT_URL="$value" ;;
+              esac
+            done < "$INFO_FILE"
+            
+            # Generate table row
+            APK_LINK="[$APK_FILENAME](https://github.com/${{ github.repository }}/releases/download/v${{ needs.test.outputs.date_today }}-${{ needs.test.outputs.commit_hash }}/$APK_FILENAME)"
+            VT_LINK="[$VT_RESULT]($VT_URL)"
             SHA256_SHORT="${SHA256:0:8}..."
             
-            echo "| $FILENAME_LINK | $ARCH | $SIZE | $VIRUSTOTAL_LINK | $SHA256_SHORT |" >> release_notes.md
+            echo "| $APK_LINK | $ARCH | $SIZE | $VT_LINK | $SHA256_SHORT |" >> release_notes.md
           done
           
           echo "" >> release_notes.md
