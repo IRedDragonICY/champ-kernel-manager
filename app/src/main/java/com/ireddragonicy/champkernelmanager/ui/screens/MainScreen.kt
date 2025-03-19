@@ -10,8 +10,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.ireddragonicy.champkernelmanager.navigation.NavigationBar
-import com.ireddragonicy.champkernelmanager.navigation.Screen
+import com.ireddragonicy.champkernelmanager.ui.navigation.NavigationBar
+import com.ireddragonicy.champkernelmanager.ui.navigation.Screen
 
 @Composable
 fun MainScreen(hasRootAccess: Boolean = true) {

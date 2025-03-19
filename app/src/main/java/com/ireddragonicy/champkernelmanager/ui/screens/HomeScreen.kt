@@ -12,7 +12,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
-import com.ireddragonicy.champkernelmanager.data.DataRepository
 import com.ireddragonicy.champkernelmanager.ui.components.*
 import kotlinx.coroutines.delay
 
@@ -20,13 +19,10 @@ import kotlinx.coroutines.delay
 @Composable
 fun HomeScreen(onNavigateToCoreControl: () -> Unit) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
-    var systemLoad by remember { mutableStateOf("") }
     var refreshTrigger by remember { mutableStateOf(0) }
-    val dataRepository = DataRepository.getInstance()
 
     LaunchedEffect(Unit) {
         while (true) {
-            systemLoad = dataRepository.getSystemLoad()
             refreshTrigger++
             delay(2000)
         }

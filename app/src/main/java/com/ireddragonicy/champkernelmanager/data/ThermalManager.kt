@@ -12,26 +12,45 @@ import java.util.regex.Pattern
 
 class ThermalManager {
     companion object {
-        private const val THERMAL_BASE_PATH = "/sys/class/thermal/"
         private const val THERMAL_CACHE_VALID_MS = 2000
-
-        // Pattern that matches: cpu-<type>-core<number>[-<suffix>]
         private val CPU_ZONE_PATTERN = Pattern.compile(
             "cpu-(little|medium|big|prime)-core(\\d+)(?:-(\\d+))?",
             Pattern.CASE_INSENSITIVE
         )
-
-        // Helper functions to build thermal paths
-        private fun getThermalZonePath(index: Int) = "${THERMAL_BASE_PATH}thermal_zone$index"
-        private fun getThermalZoneTypePath(index: Int) = "${getThermalZonePath(index)}/type"
-        private fun getThermalZoneTempPath(index: Int) = "${getThermalZonePath(index)}/temp"
-        private fun getAllZonesTypePath() = "${THERMAL_BASE_PATH}thermal_zone*/type"
     }
 
     private var cpuThermalZonesCache: Map<Int, ThermalZoneInfo>? = null
     private var thermalZoneCacheTime: Long = 0
     private var thermalInfoCache: ThermalInfo? = null
     private var thermalInfoCacheTime: Long = 0
+    private var thermalDataCache: List<Pair<String, Float>>? = null
+    private var thermalDataCacheTime: Long = 0
+
+    private suspend fun getRawThermalData(): List<Pair<String, Float>> = withContext(Dispatchers.IO) {
+        val currentTime = System.currentTimeMillis()
+        thermalDataCache?.let {
+            if (currentTime - thermalDataCacheTime < THERMAL_CACHE_VALID_MS) {
+                return@withContext it
+            }
+        }
+
+        val command = "su -c 'for z in /sys/devices/virtual/thermal/thermal_zone*; do t=\$(cat \$z/temp 2>/dev/null); y=\$(cat \$z/type 2>/dev/null); echo \"\$y|\$t\"; done'"
+        val output = FileUtils.runCommandAsRoot(command) ?: ""
+        val result = output.split('\n')
+            .filter { it.isNotEmpty() }
+            .mapNotNull { line ->
+                val parts = line.trim().split('|')
+                if (parts.size == 2) {
+                    val type = parts[0].trim()
+                    parts[1].trim().toFloatOrNull()?.let { temp ->
+                        Pair(type, temp / 1000f)
+                    }
+                } else null
+            }
+        thermalDataCache = result
+        thermalDataCacheTime = currentTime
+        result
+    }
 
     suspend fun getThermalInfo(): ThermalInfo = withContext(Dispatchers.IO) {
         val currentTime = System.currentTimeMillis()
@@ -41,44 +60,16 @@ class ThermalManager {
             }
         }
 
-        val command = StringBuilder("su -c \"")
-            .append("cat ${getAllZonesTypePath()} && echo '#TYPESEND#' && ")
-            .append("getprop init.svc.thermald && ")
-            .append("getprop init.svc.mi_thermald && ")
-            .append("getprop init.svc.vendor.thermal-mediatek\"")
+        val thermalData = getRawThermalData()
+        val serviceStatusCmd = "su -c 'getprop init.svc.thermald && getprop init.svc.mi_thermald && getprop init.svc.vendor.thermal-mediatek'"
+        val serviceOutput = FileUtils.runCommandAsRoot(serviceStatusCmd) ?: ""
+        val thermalEnabled = serviceOutput.split('\n').any { it.trim() == "running" }
 
-        val commandOutput = FileUtils.runCommandAsRoot(command.toString()) ?: ""
-        val parts = commandOutput.split("#TYPESEND#")
-
-        if (parts.size < 2) {
-            return@withContext ThermalInfo(emptyList(), false)
+        val zones = thermalData.map { (type, temp) ->
+            ThermalZone(type, temp)
         }
 
-        val typesRaw = parts[0]
-        val propResults = parts[1].trim().split('\n')
-
-        val typeList = typesRaw.split('\n').filter { it.isNotBlank() }
-
-        val tempCmd = StringBuilder("su -c \"cat ")
-        typeList.indices.forEach { i ->
-            tempCmd.append("${getThermalZoneTempPath(i)} ")
-        }
-        tempCmd.append("\"")
-
-        val tempsRaw = FileUtils.runCommandAsRoot(tempCmd.toString()) ?: ""
-        val tempsList = tempsRaw.split('\n').filter { it.isNotBlank() }
-
-        val zoneData = ArrayList<ThermalZone>(typeList.size)
-        for (i in typeList.indices) {
-            val zoneType = typeList[i]
-            tempsList.getOrNull(i)?.toFloatOrNull()?.let { rawVal ->
-                zoneData.add(ThermalZone(zoneType, rawVal / 1000))
-            }
-        }
-
-        val thermalEnabled = propResults.any { it.trim() == "running" }
-
-        val thermalInfoResult = ThermalInfo(zones = zoneData, thermalServicesEnabled = thermalEnabled)
+        val thermalInfoResult = ThermalInfo(zones = zones, thermalServicesEnabled = thermalEnabled)
         thermalInfoCache = thermalInfoResult
         thermalInfoCacheTime = currentTime
         thermalInfoResult
@@ -86,15 +77,14 @@ class ThermalManager {
 
     suspend fun setThermalServices(enabled: Boolean): Boolean = withContext(Dispatchers.IO) {
         val commands = if (enabled) {
-            "setprop persist.sys.turbosched.thermal_break.enable false && " +
-            "start thermald && start mi_thermald && start vendor.thermal-mediatek"
+            "setprop persist.sys.turbosched.thermal_break.enable false && start thermald && start mi_thermald && start vendor.thermal-mediatek"
         } else {
-            "setprop persist.sys.turbosched.thermal_break.enable true && " +
-            "stop thermald && stop mi_thermald && stop vendor.thermal-mediatek"
+            "setprop persist.sys.turbosched.thermal_break.enable true && stop thermald && stop mi_thermald && stop vendor.thermal-mediatek"
         }
 
-        val cmdOutput = FileUtils.runCommandAsRoot("su -c \"$commands\"")
+        val cmdOutput = FileUtils.runCommandAsRoot("su -c '$commands'")
         thermalInfoCache = null
+        thermalDataCache = null
         cmdOutput != null
     }
 
@@ -106,15 +96,14 @@ class ThermalManager {
             }
         }
 
-        val typesCmd = "su -c \"cat ${getAllZonesTypePath()}\""
-        val typesRaw = FileUtils.runCommandAsRoot(typesCmd) ?: ""
-        val types = typesRaw.split('\n').filter { it.isNotBlank() }
+        val thermalData = getRawThermalData()
+        val cpuZones = ArrayList<Triple<Int, String, Float>>()
 
-        val cpuZones = ArrayList<Pair<Int, String>>()
-        for ((index, type) in types.withIndex()) {
+        for ((index, pair) in thermalData.withIndex()) {
+            val (type, temp) = pair
             val matcher = CPU_ZONE_PATTERN.matcher(type)
             if (matcher.find()) {
-                cpuZones.add(Pair(index, type))
+                cpuZones.add(Triple(index, type, temp))
             }
         }
 
@@ -122,33 +111,18 @@ class ThermalManager {
             return@withContext emptyMap()
         }
 
-        val tempCommand = StringBuilder("su -c \"cat ")
-        cpuZones.forEach { (index, _) ->
-            tempCommand.append("${getThermalZoneTempPath(index)} ")
-        }
-        tempCommand.append("\"")
-
-        val tempRawItems = FileUtils.runCommandAsRoot(tempCommand.toString())
-            ?.split('\n')?.filter { it.isNotBlank() }
-            ?: return@withContext emptyMap()
-
         val tempRecords = ArrayList<TempRecord>(cpuZones.size)
-        for (i in cpuZones.indices) {
-            val (zoneId, zoneType) = cpuZones[i]
-            val tempValRaw = tempRawItems.getOrNull(i)?.toFloatOrNull() ?: continue
-
+        for ((zoneId, zoneType, tempVal) in cpuZones) {
             val matcher = CPU_ZONE_PATTERN.matcher(zoneType)
             if (matcher.find()) {
                 val cpuType = matcher.group(1)?.lowercase()
                 val coreNumber = matcher.group(2)?.toIntOrNull()
-
-                val thermalZonePath = getThermalZonePath(zoneId).substringAfterLast('/')
-
+                val thermalZonePath = "thermal_zone$zoneId"
                 tempRecords.add(
                     TempRecord(
                         zoneId = zoneId,
                         zoneType = zoneType,
-                        temperature = tempValRaw / 1000f,
+                        temperature = tempVal,
                         cpuType = cpuType,
                         coreNumber = coreNumber,
                         thermalZonePath = thermalZonePath
@@ -159,17 +133,13 @@ class ThermalManager {
 
         val finalMap = HashMap<Int, ThermalZoneInfo>()
         var assignedZoneId = 0
-
         val coreGroups = tempRecords.groupBy { Pair(it.cpuType, it.coreNumber) }
 
         coreGroups.forEach { (key, records) ->
             val (cpuType, coreNumber) = key
-
             if (cpuType != null && coreNumber != null) {
                 val avgTemp = records.sumOf { it.temperature.toDouble() } / records.size
-
                 val sourceThermalZones = records.joinToString(", ") { it.thermalZonePath }
-
                 finalMap[assignedZoneId] = ThermalZoneInfo(
                     zoneId = assignedZoneId,
                     type = "cpu-$cpuType-core$coreNumber",
@@ -194,8 +164,8 @@ class ThermalManager {
 
         for (coreIndex in 0 until coreCount) {
             val directZone = allZones.values.find { it.coreNumber == coreIndex && it.temp > 1f }
-            if (directZone != null) {
-                results[coreIndex] = String.format(Locale.US, "%.1f°C", directZone.temp)
+            directZone?.let {
+                results[coreIndex] = String.format(Locale.US, "%.1f°C", it.temp)
             }
         }
 
@@ -255,7 +225,6 @@ class ThermalManager {
                 results[coreIndex] = "N/A"
             }
         }
-
         results
     }
 }

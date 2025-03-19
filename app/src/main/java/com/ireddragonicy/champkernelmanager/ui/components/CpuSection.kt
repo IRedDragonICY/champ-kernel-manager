@@ -281,21 +281,6 @@ fun CoreFrequencyItem(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
 
-                Text(
-                    text = core.temperature,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
-                    color = if (core.temperature.replace("°C", "").trim()
-                            .toFloatOrNull()
-                            ?.let { it > 80 } == true
-                    ) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
-                    textAlign = TextAlign.Center,
-                    maxLines = 1
-                )
             } else {
                 Text(
                     text = "Offline",

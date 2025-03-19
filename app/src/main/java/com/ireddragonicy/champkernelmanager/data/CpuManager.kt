@@ -14,11 +14,8 @@ class CpuManager {
         private const val CPU_ONLINE_PATH = "/online"
     }
 
-    private val thermalManager = ThermalManager()
-
     suspend fun getCpuClusters(): List<CpuClusterInfo> = withContext(Dispatchers.IO) {
         val coreCount = Runtime.getRuntime().availableProcessors()
-        val temperaturesMap = thermalManager.getCpuTemperatures()
 
         val cpuCoreInfos = (0 until coreCount).map { core ->
             val basePath = "$CPU_PATH$core$CPU_FREQ_PATH"
@@ -35,7 +32,6 @@ class CpuManager {
             val minFreq = readFreqMHz(basePath + "scaling_min_freq")
             val governor = FileUtils.readFileAsRoot(basePath + "scaling_governor") ?: "N/A"
             val isOnline = FileUtils.readFileAsRoot(onlinePath) == "1" || core == 0
-            val tempDisplay = temperaturesMap[core] ?: "N/A"
 
             CpuCoreInfo(
                 core = core,
@@ -45,7 +41,6 @@ class CpuManager {
                 minFreqMHz = minFreq,
                 governor = governor,
                 online = isOnline,
-                temperature = tempDisplay
             )
         }
 

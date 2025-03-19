@@ -1,4 +1,4 @@
-package com.ireddragonicy.champkernelmanager.navigation
+package com.ireddragonicy.champkernelmanager.ui.navigation
 
 import androidx.navigation.NamedNavArgument
 import androidx.navigation.NavType

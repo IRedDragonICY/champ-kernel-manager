@@ -52,4 +52,5 @@ class DataRepository private constructor() {
     suspend fun getSystemInfo(): SystemInfo = systemManager.getSystemInfo()
     suspend fun setIoScheduler(scheduler: String): Boolean = systemManager.setIoScheduler(scheduler)
     suspend fun setTcpCongestion(algorithm: String): Boolean = systemManager.setTcpCongestion(algorithm)
+
 }
