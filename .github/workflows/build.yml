@@ -8,16 +8,6 @@ on:
     branches: [main, master, develop]
     tags: ['v*']
   workflow_dispatch:
-    inputs:
-      release_type:
-        description: 'Release Type'
-        required: true
-        default: 'beta'
-        type: choice
-        options:
-          - alpha
-          - beta
-          - stable
 
 jobs:
   test:
@@ -26,8 +16,6 @@ jobs:
     outputs:
       commit_hash: ${{ steps.vars.outputs.commit_hash }}
       date_today: ${{ steps.vars.outputs.date_today }}
-      version_name: ${{ steps.version.outputs.version_name }}
-      version_code: ${{ steps.version.outputs.version_code }}
 
     steps:
       - name: Checkout code
@@ -41,14 +29,6 @@ jobs:
           echo "commit_hash=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
           echo "date_today=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
           echo "build_number=$(date +'%Y%m%d%H%M')" >> $GITHUB_ENV
-
-      - name: Get version info
-        id: version
-        run: |
-          VERSION_NAME=$(grep -oP 'versionName "\K[^"]+' app/build.gradle || echo "1.0.0")
-          VERSION_CODE=$(grep -oP 'versionCode \K\d+' app/build.gradle || echo "1")
-          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
-          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -79,8 +59,6 @@ jobs:
     name: Build App
     needs: test
     runs-on: ubuntu-latest
-    outputs:
-      scan_results: ${{ steps.scan_apks.outputs.scan_results }}
 
     steps:
       - name: Checkout code
@@ -146,106 +124,107 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y aapt
 
-      - name: Extract APK information
-        id: apk_info
-        run: |
-          mkdir -p apk_info
-          echo "Processing APKs and extracting architecture information..."
-          
-          echo "APK_INFO_JSON={\"files\":[]}" > apk_info.json
-          
-          for APK_PATH in $(find app/build/outputs/apk -name "*.apk"); do
-            APK_NAME=$(basename "$APK_PATH")
-            APK_SIZE=$(du -h "$APK_PATH" | cut -f1)
-            
-            # Use aapt to get architectures
-            ARCHS=$(aapt list -a "$APK_PATH" | grep "native-code" | grep -oP '/\K[^/]+(?=/)' | sort | uniq | tr '\n' ',' | sed 's/,$//')
-            
-            if [ -z "$ARCHS" ]; then
-              ARCHS="universal"
-            fi
-            
-            # Calculate SHA-256 hash
-            SHA256=$(sha256sum "$APK_PATH" | cut -d' ' -f1)
-            
-            # Get variant name (debug/release)
-            if [[ "$APK_PATH" == *"debug"* ]]; then
-              VARIANT="debug"
-            else
-              VARIANT="release"
-            fi
-            
-            # Add to JSON
-            APK_INFO_JSON=$(echo "$APK_INFO_JSON" | jq --arg path "$APK_PATH" --arg name "$APK_NAME" --arg size "$APK_SIZE" --arg arch "$ARCHS" --arg variant "$VARIANT" --arg sha256 "$SHA256" \
-              '.files += [{"path":$path,"name":$name,"size":$size,"architecture":$arch,"variant":$variant,"sha256":$sha256,"virus_total":null}]')
-            
-            echo "$APK_INFO_JSON" > apk_info.json
-            
-            echo "Processed: $APK_NAME ($ARCHS, $VARIANT)"
-          done
-          
-          cat apk_info.json
-
-      - name: Scan APKs with VirusTotal
-        id: scan_apks
+      - name: Scan APKs with VirusTotal and prepare info
+        id: prepare_apks
         env:
           VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
         run: |
-          if [ -n "$VIRUSTOTAL_API_KEY" ]; then
-            echo "Starting VirusTotal scan for APKs..."
+          # Create output directory for APK info
+          mkdir -p apk_info
+          
+          # Process each APK and create info files
+          for APK_FILE in $(find app/build/outputs/apk -name "*.apk"); do
+            APK_FILENAME=$(basename "$APK_FILE")
+            APK_SIZE=$(du -h "$APK_FILE" | cut -f1)
             
-            APK_INFO_JSON=$(cat apk_info.json)
-            
-            for i in $(echo "$APK_INFO_JSON" | jq -r '.files | keys | .[]'); do
-              APK_PATH=$(echo "$APK_INFO_JSON" | jq -r ".files[$i].path")
-              
-              if [ -f "$APK_PATH" ]; then
-                echo "Scanning $APK_PATH with VirusTotal..."
-                
-                RESPONSE=$(curl -s \
-                  --url https://www.virustotal.com/api/v3/files \
-                  --header "x-apikey: $VIRUSTOTAL_API_KEY" \
-                  --form file=@"$APK_PATH")
-                
-                if echo "$RESPONSE" | grep -q "id"; then
-                  ANALYSIS_ID=$(echo "$RESPONSE" | jq -r '.data.id')
-                  ANALYSIS_URL="https://www.virustotal.com/gui/file-analysis/$ANALYSIS_ID"
-                  
-                  # Try to get scan results (might be pending)
-                  sleep 5
-                  SCAN_RESPONSE=$(curl -s \
-                    --url "https://www.virustotal.com/api/v3/analyses/$ANALYSIS_ID" \
-                    --header "x-apikey: $VIRUSTOTAL_API_KEY")
-                  
-                  STATUS=$(echo "$SCAN_RESPONSE" | jq -r '.data.attributes.status' 2>/dev/null || echo "pending")
-                  STATS=""
-                  
-                  if [ "$STATUS" = "completed" ]; then
-                    MALICIOUS=$(echo "$SCAN_RESPONSE" | jq -r '.data.attributes.stats.malicious' 2>/dev/null || echo "?")
-                    SUSPICIOUS=$(echo "$SCAN_RESPONSE" | jq -r '.data.attributes.stats.suspicious' 2>/dev/null || echo "?")
-                    UNDETECTED=$(echo "$SCAN_RESPONSE" | jq -r '.data.attributes.stats.undetected' 2>/dev/null || echo "?")
-                    STATS="$MALICIOUS malicious, $SUSPICIOUS suspicious, $UNDETECTED clean"
-                  else
-                    STATS="Scan pending"
-                  fi
-                  
-                  # Update JSON with scan results
-                  APK_INFO_JSON=$(echo "$APK_INFO_JSON" | jq --arg i "$i" --arg url "$ANALYSIS_URL" --arg stats "$STATS" --arg status "$STATUS" \
-                    '.files[$i | tonumber].virus_total = {"url": $url, "stats": $stats, "status": $status}')
-                else
-                  echo "VirusTotal API error for $APK_PATH"
-                  APK_INFO_JSON=$(echo "$APK_INFO_JSON" | jq --arg i "$i" \
-                    '.files[$i | tonumber].virus_total = {"url": "Error", "stats": "API error", "status": "error"}')
-                fi
+            # Extract architecture information
+            if [[ "$APK_FILENAME" == *"arm64"* ]]; then
+              ARCH="arm64-v8a"
+            elif [[ "$APK_FILENAME" == *"armeabi"* ]]; then
+              ARCH="armeabi-v7a"
+            elif [[ "$APK_FILENAME" == *"x86_64"* ]]; then
+              ARCH="x86_64"
+            elif [[ "$APK_FILENAME" == *"x86"* ]]; then
+              ARCH="x86"
+            else
+              # Use aapt to detect architecture if not in filename
+              ARCH_INFO=$(aapt list -a "$APK_FILE" | grep "native-code" || echo "universal")
+              if [[ "$ARCH_INFO" == *"arm64-v8a"* ]]; then
+                ARCH="arm64-v8a"
+              elif [[ "$ARCH_INFO" == *"armeabi-v7a"* ]]; then
+                ARCH="armeabi-v7a"
+              elif [[ "$ARCH_INFO" == *"x86_64"* ]]; then
+                ARCH="x86_64"
+              elif [[ "$ARCH_INFO" == *"x86"* ]]; then
+                ARCH="x86"
+              else
+                ARCH="universal"
               fi
-            done
+            fi
             
-            echo "$APK_INFO_JSON" > apk_info.json
-            echo "scan_results=$(cat apk_info.json | jq -c)" >> $GITHUB_OUTPUT
-          else
-            echo "VIRUSTOTAL_API_KEY not set, skipping scan"
-            echo "scan_results=$(cat apk_info.json | jq -c)" >> $GITHUB_OUTPUT
-          fi
+            # Calculate SHA256 hash
+            SHA256=$(sha256sum "$APK_FILE" | cut -d' ' -f1)
+            
+            # Determine variant
+            if [[ "$APK_FILE" == *"debug"* ]]; then
+              VARIANT="Debug"
+            else
+              VARIANT="Release"
+            fi
+            
+            # Scan with VirusTotal if API key is available
+            VT_RESULT="Not scanned"
+            VT_URL="#"
+            
+            if [ -n "$VIRUSTOTAL_API_KEY" ]; then
+              echo "Scanning $APK_FILENAME with VirusTotal..."
+              VT_RESPONSE=$(curl -s \
+                --url https://www.virustotal.com/api/v3/files \
+                --header "x-apikey: $VIRUSTOTAL_API_KEY" \
+                --form file=@"$APK_FILE")
+              
+              if echo "$VT_RESPONSE" | grep -q "id"; then
+                ANALYSIS_ID=$(echo "$VT_RESPONSE" | jq -r '.data.id')
+                VT_URL="https://www.virustotal.com/gui/file-analysis/$ANALYSIS_ID"
+                
+                # Try to get results (might be pending)
+                sleep 10
+                SCAN_RESPONSE=$(curl -s \
+                  --url "https://www.virustotal.com/api/v3/analyses/$ANALYSIS_ID" \
+                  --header "x-apikey: $VIRUSTOTAL_API_KEY")
+                
+                STATUS=$(echo "$SCAN_RESPONSE" | jq -r '.data.attributes.status' 2>/dev/null || echo "pending")
+                
+                if [ "$STATUS" = "completed" ]; then
+                  MALICIOUS=$(echo "$SCAN_RESPONSE" | jq -r '.data.attributes.stats.malicious' 2>/dev/null || echo "0")
+                  SUSPICIOUS=$(echo "$SCAN_RESPONSE" | jq -r '.data.attributes.stats.suspicious' 2>/dev/null || echo "0")
+                  UNDETECTED=$(echo "$SCAN_RESPONSE" | jq -r '.data.attributes.stats.undetected' 2>/dev/null || echo "0")
+                  VT_RESULT="$MALICIOUS/$SUSPICIOUS/$UNDETECTED (malicious/suspicious/clean)"
+                else
+                  VT_RESULT="Scan pending"
+                fi
+              else
+                VT_RESULT="Scan error"
+              fi
+            fi
+            
+            # Save info file - one file per APK for reliable passing between jobs
+            cat > "apk_info/${APK_FILENAME}.txt" << EOF
+            FILENAME=${APK_FILENAME}
+            ARCH=${ARCH}
+            SIZE=${APK_SIZE}
+            SHA256=${SHA256}
+            VARIANT=${VARIANT}
+            VT_RESULT=${VT_RESULT}
+            VT_URL=${VT_URL}
+            EOF
+            
+            echo "Processed: $APK_FILENAME ($ARCH, $VARIANT)"
+            echo "VirusTotal: $VT_RESULT"
+          done
+          
+          # List all processed APKs
+          echo "APK_FILES=$(ls apk_info/*.txt | tr '\n' ' ')" >> $GITHUB_OUTPUT
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -255,7 +234,7 @@ jobs:
             app/build/outputs/apk/debug/*.apk
             app/build/outputs/apk/release/*.apk
             app/build/outputs/bundle/release/*.aab
-            apk_info.json
+            apk_info/
           retention-days: 7
           if-no-files-found: warn
 
@@ -266,6 +245,11 @@ jobs:
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -274,40 +258,45 @@ jobs:
 
       - name: Generate release notes
         run: |
-          SCAN_RESULTS='${{ needs.build.outputs.scan_results }}'
+          echo "# ${{ env.APP_NAME }} - ${{ needs.test.outputs.date_today }} (${{ needs.test.outputs.commit_hash }})" > release_notes.md
+          echo "" >> release_notes.md
+          echo "![Build Status](https://github.com/${{ github.repository }}/actions/workflows/build-release.yml/badge.svg)" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## 📱 Release Information" >> release_notes.md
+          echo "- **Date**: $(date +'%B %d, %Y')" >> release_notes.md
+          echo "- **Commit**: [${{ needs.test.outputs.commit_hash }}](https://github.com/${{ github.repository }}/commit/${{ needs.test.outputs.commit_hash }})" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## 📥 Downloads" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "| Filename | Architecture | Size | VirusTotal | SHA-256 |" >> release_notes.md
+          echo "|----------|--------------|------|------------|---------|" >> release_notes.md
           
-          cat > release_notes.md << EOL
-          # ${{ env.APP_NAME }} v${{ needs.test.outputs.version_name }} (build ${{ needs.test.outputs.version_code }})
+          for INFO_FILE in artifacts/apk_info/*.txt; do
+            source "$INFO_FILE"
+            FILENAME_LINK="[$FILENAME](https://github.com/${{ github.repository }}/releases/download/v${{ needs.test.outputs.date_today }}-${{ needs.test.outputs.commit_hash }}/$FILENAME)"
+            VIRUSTOTAL_LINK="[$VT_RESULT]($VT_URL)"
+            SHA256_SHORT="${SHA256:0:8}..."
+            
+            echo "| $FILENAME_LINK | $ARCH | $SIZE | $VIRUSTOTAL_LINK | $SHA256_SHORT |" >> release_notes.md
+          done
           
-          ![Build Status](https://github.com/${{ github.repository }}/actions/workflows/build-release.yml/badge.svg)
-          
-          ## 📱 Release Information
-          - **Version**: ${{ needs.test.outputs.version_name }} (build ${{ needs.test.outputs.version_code }})
-          - **Date**: $(date +'%B %d, %Y')
-          - **Commit**: ${{ needs.test.outputs.commit_hash }}
-          
-          ## 📥 Downloads
-          
-          | Variant | Architecture | Size | VirusTotal | SHA-256 |
-          |---------|--------------|------|------------|---------|
-          $(echo "$SCAN_RESULTS" | jq -r '.files[] | "| [\(.name)](https://github.com/${{ github.repository }}/releases/download/v${{ needs.test.outputs.date_today }}-${{ needs.test.outputs.commit_hash }}/\(.name)) | \(.architecture) | \(.size) | [\(.virus_total.stats // \"Not scanned\")](\(.virus_total.url // \"#\")) | \(.sha256[0:8])... |"')
-          
-          ## 🔄 Recent Changes
-          $(git log -10 --pretty=format:"- %s (%h)" --abbrev-commit)
-          
-          ## 📋 Installation Instructions
-          1. Download the APK appropriate for your device architecture
-          2. Enable "Install from Unknown Sources" in your device settings
-          3. Install the application
-          
-          ## 📞 Support
-          If you encounter any issues, please [open an issue](https://github.com/${{ github.repository }}/issues/new) on GitHub.
-          EOL
+          echo "" >> release_notes.md
+          echo "## 🔄 Recent Changes" >> release_notes.md
+          git log -10 --pretty=format:"- %s (%h)" --abbrev-commit >> release_notes.md
+          echo "" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## 📋 Installation Instructions" >> release_notes.md
+          echo "1. Download the APK appropriate for your device architecture" >> release_notes.md
+          echo "2. Enable \"Install from Unknown Sources\" in your device settings" >> release_notes.md
+          echo "3. Install the application" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## 📞 Support" >> release_notes.md
+          echo "If you encounter any issues, please [open an issue](https://github.com/${{ github.repository }}/issues/new) on GitHub." >> release_notes.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ env.APP_NAME }} v${{ needs.test.outputs.version_name }} (${{ needs.test.outputs.date_today }})
+          name: ${{ env.APP_NAME }} - ${{ needs.test.outputs.date_today }} (${{ needs.test.outputs.commit_hash }})
           tag_name: v${{ needs.test.outputs.date_today }}-${{ needs.test.outputs.commit_hash }}
           prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
           body_path: release_notes.md
